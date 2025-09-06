@@ -10,6 +10,7 @@ __pycache__/
 node_modules/
 dist/
 .vscode/
+.venv/
 
 # OS
 .DS_Store
