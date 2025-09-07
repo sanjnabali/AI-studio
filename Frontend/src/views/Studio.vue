@@ -39,7 +39,7 @@
             class="group relative"
           >
             <div
-              @click="chatStore.selectChat(chat.id)"
+              @click="selectChat(chat.id)"
               class="p-3 rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
               :class="{
                 'bg-blue-50 dark:bg-blue-900/20 border-l-4 border-blue-500': chatStore.activeChat?.id === chat.id
@@ -62,14 +62,12 @@
                   <button
                     @click.stop="editChatTitle(chat)"
                     class="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded"
-                    title="Edit Title"
                   >
                     <PencilIcon class="w-3 h-3" />
                   </button>
                   <button
                     @click.stop="deleteChat(chat.id)"
                     class="p-1 text-gray-400 hover:text-red-600 rounded"
-                    title="Delete Chat"
                   >
                     <TrashIcon class="w-3 h-3" />
                   </button>
@@ -80,11 +78,13 @@
           
           <!-- Empty State -->
           <div v-if="!chatStore.chats.length" class="text-center py-8">
-            <ChatBubbleLeftRightIcon class="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
+            <div class="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl flex items-center justify-center mx-auto mb-3">
+              <SparklesIcon class="w-6 h-6 text-white" />
+            </div>
             <p class="text-sm text-gray-500 dark:text-gray-400">No conversations yet</p>
             <button
               @click="createNewChat"
-              class="mt-2 text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300"
+              class="mt-2 text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800"
             >
               Start your first chat
             </button>
@@ -136,41 +136,40 @@
 
           <div class="flex items-center space-x-2">
             <!-- Model Selector -->
-            <ModelSelector 
-              v-model:selectedModel="currentModel" 
-              @update:selectedModel="onModelChange"
-            />
+            <select
+              v-model="currentModel"
+              class="px-3 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+            >
+              <option value="Phi-2">Phi-2 (General)</option>
+              <option value="Phi-2-Code">Phi-2 (Code)</option>
+              <option value="T5-Small">T5 (Summarization)</option>
+            </select>
 
             <!-- Feature Toggles -->
             <div class="flex items-center space-x-1 border-l border-gray-200 dark:border-gray-700 pl-2">
-              <!-- Canvas Toggle -->
               <button
                 @click="showCanvas = !showCanvas"
                 class="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
                 :class="{ 'bg-blue-100 dark:bg-blue-900/20 text-blue-600': showCanvas }"
-                title="Toggle Code Canvas"
               >
                 <CodeBracketIcon class="w-5 h-5" />
               </button>
 
-              <!-- Voice Toggle -->
               <button
                 @click="toggleVoice"
                 class="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
                 :class="{ 'bg-red-100 dark:bg-red-900/20 text-red-600': isRecording }"
-                title="Voice Input"
               >
                 <MicrophoneIcon class="w-5 h-5" />
               </button>
 
-              <!-- Audio Overview -->
               <button
-                @click="generateAudioOverview"
-                :disabled="!chatStore.activeChat?.messages.length"
-                class="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Generate Audio Overview"
+                @click="toggleRAG"
+                class="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                :class="{ 'bg-green-100 dark:bg-green-900/20 text-green-600': ragEnabled }"
+                title="Toggle RAG"
               >
-                <SpeakerWaveIcon class="w-5 h-5" />
+                <DocumentMagnifyingGlassIcon class="w-5 h-5" />
               </button>
             </div>
           </div>
@@ -183,7 +182,7 @@
           <!-- Messages -->
           <div ref="messagesContainer" class="flex-1 overflow-y-auto p-4 space-y-6">
             <!-- Welcome Message -->
-            <div v-if="!chatStore.activeChatMessages.length" class="text-center py-12">
+            <div v-if="!messages.length" class="text-center py-12">
               <div class="w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
                 <SparklesIcon class="w-8 h-8 text-white" />
               </div>
@@ -191,11 +190,9 @@
                 Welcome to AI Studio
               </h3>
               <p class="text-gray-600 dark:text-gray-400 mb-6 max-w-md mx-auto">
-                Your multimodal AI workspace for coding, analysis, creative writing, and more. 
-                What would you like to create today?
+                Your multimodal AI workspace for coding, analysis, creative writing, and more.
               </p>
               
-              <!-- Feature Highlights -->
               <div class="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-2xl mx-auto">
                 <div
                   v-for="feature in features"
@@ -212,7 +209,7 @@
 
             <!-- Chat Messages -->
             <div
-              v-for="message in chatStore.activeChatMessages"
+              v-for="message in messages"
               :key="message.id"
               class="flex"
               :class="{
@@ -227,7 +224,6 @@
                   'mr-12': message.role === 'assistant'
                 }"
               >
-                <!-- Message Content -->
                 <div
                   class="px-4 py-3 rounded-2xl shadow-sm"
                   :class="{
@@ -235,90 +231,38 @@
                     'bg-white dark:bg-gray-800 text-gray-900 dark:text-white border border-gray-200 dark:border-gray-700': message.role === 'assistant'
                   }"
                 >
-                  <!-- Text Content -->
-                  <div v-if="message.type === 'text'" class="whitespace-pre-wrap">
-                    {{ message.content }}
-                  </div>
-                  
-                  <!-- Code Content -->
-                  <div v-else-if="message.type === 'code'" class="space-y-3">
-                    <div class="flex items-center justify-between">
-                      <span class="text-xs font-medium opacity-75">{{ message.metadata?.language || 'Code' }}</span>
-                      <button
-                        @click="copyToClipboard(message.content)"
-                        class="text-xs opacity-75 hover:opacity-100 px-2 py-1 rounded transition-opacity"
-                      >
-                        Copy
-                      </button>
-                    </div>
-                    <pre class="bg-gray-900 text-green-400 p-4 rounded-lg overflow-x-auto text-sm font-mono"><code>{{ message.content }}</code></pre>
-                  </div>
-                  
-                  <!-- Image Content -->
-                  <div v-else-if="message.type === 'image'" class="space-y-2">
-                    <img 
-                      :src="message.content" 
-                      :alt="message.metadata?.alt || 'Generated image'"
-                      class="max-w-full h-auto rounded-lg"
-                    />
-                    <div v-if="message.metadata?.prompt" class="text-sm opacity-75">
-                      Prompt: {{ message.metadata.prompt }}
-                    </div>
-                  </div>
-                  
-                  <!-- Audio Content -->
-                  <div v-else-if="message.type === 'audio'" class="space-y-2">
-                    <audio controls class="w-full">
-                      <source :src="message.content" type="audio/wav">
-                      Your browser does not support the audio element.
-                    </audio>
-                    <div v-if="message.metadata?.transcript" class="text-sm opacity-75">
-                      "{{ message.metadata.transcript }}"
-                    </div>
-                  </div>
-
-                  <!-- Message Metadata -->
+                  <div class="whitespace-pre-wrap">{{ message.content }}</div>
                   <div class="flex items-center justify-between mt-2 text-xs opacity-70">
                     <span>{{ formatTime(message.timestamp) }}</span>
                     <div class="flex items-center space-x-2">
-                      <span v-if="message.metadata?.model">{{ message.metadata.model }}</span>
-                      <span v-if="message.metadata?.tokens">{{ message.metadata.tokens }} tokens</span>
+                      <span v-if="message.model">{{ message.model }}</span>
+                      <span v-if="message.latency">{{ message.latency.toFixed(0) }}ms</span>
                     </div>
                   </div>
                 </div>
 
-                <!-- Message Actions -->
                 <div 
                   v-if="message.role === 'assistant'"
                   class="absolute -bottom-2 left-4 opacity-0 group-hover:opacity-100 transition-opacity flex items-center space-x-1"
                 >
                   <button
-                    @click="regenerateResponse(message)"
-                    class="p-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full shadow-sm hover:shadow-md transition-shadow"
-                    title="Regenerate"
-                  >
-                    <ArrowPathIcon class="w-3 h-3 text-gray-600 dark:text-gray-400" />
-                  </button>
-                  <button
                     @click="copyToClipboard(message.content)"
                     class="p-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full shadow-sm hover:shadow-md transition-shadow"
-                    title="Copy"
                   >
                     <ClipboardIcon class="w-3 h-3 text-gray-600 dark:text-gray-400" />
                   </button>
                   <button
-                    @click="shareMessage(message)"
+                    @click="regenerateResponse(message)"
                     class="p-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-full shadow-sm hover:shadow-md transition-shadow"
-                    title="Share"
                   >
-                    <ShareIcon class="w-3 h-3 text-gray-600 dark:text-gray-400" />
+                    <ArrowPathIcon class="w-3 h-3 text-gray-600 dark:text-gray-400" />
                   </button>
                 </div>
               </div>
             </div>
 
             <!-- Typing Indicator -->
-            <div v-if="chatStore.loading" class="flex justify-start">
+            <div v-if="isLoading" class="flex justify-start">
               <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl px-4 py-3 shadow-sm">
                 <div class="flex items-center space-x-2">
                   <div class="flex space-x-1">
@@ -334,27 +278,6 @@
 
           <!-- Input Area -->
           <div class="p-4 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
-            <!-- File Upload Area -->
-            <div v-if="uploadedFiles.length" class="mb-4">
-              <div class="flex flex-wrap gap-2">
-                <div
-                  v-for="file in uploadedFiles"
-                  :key="file.name"
-                  class="flex items-center space-x-2 bg-gray-100 dark:bg-gray-700 rounded-lg px-3 py-2"
-                >
-                  <component :is="getFileIcon(file.type)" class="w-4 h-4 text-gray-500" />
-                  <span class="text-sm text-gray-700 dark:text-gray-300 truncate max-w-32">{{ file.name }}</span>
-                  <button
-                    @click="removeFile(file.name)"
-                    class="text-gray-400 hover:text-red-500 transition-colors"
-                  >
-                    <XMarkIcon class="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <!-- Input Controls -->
             <div class="flex items-end space-x-3">
               <!-- File Upload -->
               <button
@@ -366,11 +289,15 @@
               </button>
 
               <!-- Voice Input -->
-              <VoiceRecorder 
-                @recordingComplete="handleVoiceInput"
-                @recordingStart="onRecordingStart"
-                @recordingStop="onRecordingStop"
-              />
+              <button
+                @click="toggleVoiceInput"
+                :disabled="isRecording"
+                class="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                :class="{ 'bg-red-100 text-red-600': isRecording }"
+                title="Voice Input"
+              >
+                <MicrophoneIcon class="w-5 h-5" />
+              </button>
 
               <!-- Message Input -->
               <div class="flex-1 relative">
@@ -378,11 +305,11 @@
                   ref="messageInput"
                   v-model="inputMessage"
                   @keydown="handleInputKeydown"
-                  @input="handleInputChange"
+                  @input="autoResize"
                   placeholder="Message AI Studio..."
                   class="w-full px-4 py-3 pr-12 border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                   :rows="inputRows"
-                  :disabled="chatStore.loading"
+                  :disabled="isLoading"
                 ></textarea>
                 
                 <!-- Send Button -->
@@ -397,38 +324,82 @@
               </div>
             </div>
 
-            <!-- Suggestions -->
-            <div v-if="showSuggestions" class="mt-4 flex flex-wrap gap-2">
-              <button
-                v-for="suggestion in currentSuggestions"
-                :key="suggestion"
-                @click="applySuggestion(suggestion)"
-                class="px-3 py-1 text-sm bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-full transition-colors"
+            <!-- Domain Selector -->
+            <div class="mt-3 flex items-center space-x-2">
+              <span class="text-sm text-gray-500 dark:text-gray-400">Domain:</span>
+              <select
+                v-model="selectedDomain"
+                class="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
               >
-                {{ suggestion }}
-              </button>
+                <option value="general">General</option>
+                <option value="code">Code</option>
+                <option value="creative">Creative</option>
+                <option value="analysis">Analysis</option>
+                <option value="summarizer">Summarizer</option>
+              </select>
+
+              <div v-if="ragEnabled" class="flex items-center space-x-2 ml-4">
+                <span class="text-sm text-green-600 dark:text-green-400">RAG Enabled</span>
+                <div class="w-2 h-2 bg-green-500 rounded-full"></div>
+              </div>
             </div>
 
-            <!-- Input Status -->
-            <div v-if="inputStatus" class="mt-2 text-xs text-gray-500 dark:text-gray-400 flex items-center space-x-2">
-              <span>{{ inputStatus }}</span>
-              <LoadingSpinner v-if="processingInput" />
+            <!-- Upload Status -->
+            <div v-if="uploadedFiles.length" class="mt-3 flex flex-wrap gap-2">
+              <div
+                v-for="file in uploadedFiles"
+                :key="file.name"
+                class="flex items-center space-x-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg px-3 py-1"
+              >
+                <DocumentIcon class="w-4 h-4 text-blue-500" />
+                <span class="text-sm text-blue-700 dark:text-blue-300">{{ file.name }}</span>
+                <button
+                  @click="removeFile(file.name)"
+                  class="text-blue-400 hover:text-red-500 transition-colors"
+                >
+                  <XMarkIcon class="w-3 h-3" />
+                </button>
+              </div>
             </div>
           </div>
         </div>
 
         <!-- Code Canvas Panel -->
-        <CodeCanvas v-if="showCanvas" class="w-96" />
+        <div
+          v-if="showCanvas"
+          class="w-96 border-l border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+        >
+          <div class="h-full flex flex-col">
+            <div class="p-3 border-b border-gray-200 dark:border-gray-700">
+              <h3 class="font-medium text-gray-900 dark:text-white">Code Canvas</h3>
+            </div>
+            <div class="flex-1 p-4">
+              <textarea
+                v-model="canvasCode"
+                class="w-full h-full font-mono text-sm bg-gray-900 text-green-400 border-none outline-none resize-none p-4 rounded"
+                placeholder="// Your code here..."
+              ></textarea>
+            </div>
+            <div class="p-3 border-t border-gray-200 dark:border-gray-700">
+              <button
+                @click="runCode"
+                class="w-full px-3 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm"
+              >
+                Run Code
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
     <!-- Settings Panel -->
     <div
       v-if="showSettings"
-      class="w-80 bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 flex flex-col"
+      class="w-80 bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700"
     >
       <div class="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-        <h3 class="font-semibold text-gray-900 dark:text-white">Model Settings</h3>
+        <h3 class="font-semibold text-gray-900 dark:text-white">Settings</h3>
         <button
           @click="showSettings = false"
           class="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded"
@@ -437,55 +408,20 @@
         </button>
       </div>
       
-      <div class="flex-1 overflow-y-auto p-4 space-y-6">
-        <!-- Temperature Control -->
+      <div class="p-4 space-y-6">
+        <!-- Temperature -->
         <div>
           <div class="flex items-center justify-between mb-2">
             <label class="text-sm font-medium text-gray-700 dark:text-gray-300">Temperature</label>
-            <span class="text-sm text-gray-500 dark:text-gray-400">{{ settingsStore.modelConfig.temperature }}</span>
+            <span class="text-sm text-gray-500 dark:text-gray-400">{{ temperature }}</span>
           </div>
           <input
-            v-model.number="settingsStore.modelConfig.temperature"
-            type="range"
-            min="0"
-            max="2"
-            step="0.1"
-            class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
-          />
-          <div class="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-1">
-            <span>Precise</span>
-            <span>Creative</span>
-          </div>
-        </div>
-
-        <!-- Top K Control -->
-        <div>
-          <div class="flex items-center justify-between mb-2">
-            <label class="text-sm font-medium text-gray-700 dark:text-gray-300">Top K</label>
-            <span class="text-sm text-gray-500 dark:text-gray-400">{{ settingsStore.modelConfig.topK }}</span>
-          </div>
-          <input
-            v-model.number="settingsStore.modelConfig.topK"
-            type="range"
-            min="1"
-            max="100"
-            class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
-          />
-        </div>
-
-        <!-- Top P Control -->
-        <div>
-          <div class="flex items-center justify-between mb-2">
-            <label class="text-sm font-medium text-gray-700 dark:text-gray-300">Top P</label>
-            <span class="text-sm text-gray-500 dark:text-gray-400">{{ settingsStore.modelConfig.topP }}</span>
-          </div>
-          <input
-            v-model.number="settingsStore.modelConfig.topP"
+            v-model.number="temperature"
             type="range"
             min="0"
             max="1"
-            step="0.01"
-            class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
+            step="0.1"
+            class="w-full"
           />
         </div>
 
@@ -493,79 +429,33 @@
         <div>
           <div class="flex items-center justify-between mb-2">
             <label class="text-sm font-medium text-gray-700 dark:text-gray-300">Max Tokens</label>
-            <span class="text-sm text-gray-500 dark:text-gray-400">{{ settingsStore.modelConfig.maxTokens }}</span>
+            <span class="text-sm text-gray-500 dark:text-gray-400">{{ maxTokens }}</span>
           </div>
           <input
-            v-model.number="settingsStore.modelConfig.maxTokens"
+            v-model.number="maxTokens"
             type="range"
-            min="256"
-            max="4096"
-            step="256"
-            class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
+            min="50"
+            max="500"
+            step="50"
+            class="w-full"
           />
         </div>
 
-        <!-- Domain Profiles -->
-        <div>
-          <h4 class="font-medium text-gray-700 dark:text-gray-300 mb-3">Domain Profiles</h4>
+        <!-- System Status -->
+        <div class="border-t border-gray-200 dark:border-gray-700 pt-4">
+          <h4 class="font-medium text-gray-700 dark:text-gray-300 mb-3">System Status</h4>
           <div class="space-y-2">
-            <label
-              v-for="profile in settingsStore.domainProfiles"
-              :key="profile.id"
-              class="flex items-center p-2 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg cursor-pointer transition-colors"
-            >
-              <input
-                v-model="profile.active"
-                type="checkbox"
-                class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 mr-3"
-              />
-              <div>
-                <span class="text-sm text-gray-700 dark:text-gray-300 font-medium">{{ profile.name }}</span>
-                <div class="text-xs text-gray-500 dark:text-gray-400">
-                  Optimized for {{ profile.id }} tasks
-                </div>
-              </div>
-            </label>
-          </div>
-        </div>
-
-        <!-- Active Agents -->
-        <div>
-          <h4 class="font-medium text-gray-700 dark:text-gray-300 mb-3">Active Agents</h4>
-          <div class="space-y-3">
-            <div
-              v-for="agent in settingsStore.agents"
-              :key="agent.id"
-              class="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg"
-            >
-              <div class="flex items-center justify-between mb-2">
-                <div class="font-medium text-sm text-gray-900 dark:text-white">
-                  {{ agent.name }}
-                </div>
-                <div
-                  class="w-2 h-2 rounded-full"
-                  :class="{
-                    'bg-green-500': agent.status === 'idle',
-                    'bg-yellow-500': agent.status === 'busy',
-                    'bg-red-500': agent.status === 'error'
-                  }"
-                  :title="agent.status"
-                ></div>
-              </div>
-              <div class="text-xs text-gray-500 dark:text-gray-400 mb-2">
-                {{ agent.description }}
-              </div>
-              <div class="flex items-center justify-between">
-                <span class="text-xs bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 px-2 py-1 rounded capitalize">
-                  {{ agent.type }}
-                </span>
-                <button
-                  @click="configureAgent(agent)"
-                  class="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300"
-                >
-                  Configure
-                </button>
-              </div>
+            <div class="flex items-center justify-between">
+              <span class="text-sm text-gray-600 dark:text-gray-400">Models Loaded</span>
+              <div class="w-2 h-2 bg-green-500 rounded-full"></div>
+            </div>
+            <div class="flex items-center justify-between">
+              <span class="text-sm text-gray-600 dark:text-gray-400">RAG Engine</span>
+              <div class="w-2 h-2 bg-green-500 rounded-full"></div>
+            </div>
+            <div class="flex items-center justify-between">
+              <span class="text-sm text-gray-600 dark:text-gray-400">Voice Processing</span>
+              <div class="w-2 h-2 bg-green-500 rounded-full"></div>
             </div>
           </div>
         </div>
@@ -577,275 +467,340 @@
       ref="fileInput"
       type="file"
       multiple
-      accept="image/*,.pdf,.docx,.txt,.mp3,.mp4,.json,.csv"
+      accept=".txt,.pdf,.docx,.md,.json"
       class="hidden"
       @change="handleFileUpload"
     />
-
-    <!-- Edit Title Modal -->
-    <div v-if="editingChat" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div class="bg-white dark:bg-gray-800 rounded-xl p-6 w-96 max-w-90vw">
-        <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Edit Chat Title</h3>
-        <input
-          ref="titleInput"
-          v-model="newTitle"
-          type="text"
-          class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          @keydown.enter="saveChatTitle"
-          @keydown.escape="cancelEditTitle"
-        />
-        <div class="flex justify-end space-x-2 mt-4">
-          <button
-            @click="cancelEditTitle"
-            class="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
-          >
-            Cancel
-          </button>
-          <button
-            @click="saveChatTitle"
-            class="px-4 py-2 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded-lg"
-          >
-            Save
-          </button>
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, nextTick } from 'vue'
-
-// Import icons (adjust import paths as needed)
-import { 
-  PlusIcon, PencilIcon, TrashIcon, ChatBubbleLeftRightIcon, CogIcon, ChevronRightIcon,
-  SparklesIcon, CodeBracketIcon, MicrophoneIcon, SpeakerWaveIcon, PaperClipIcon,
-  PaperAirplaneIcon, XMarkIcon, ArrowPathIcon, ClipboardIcon, ShareIcon
+import {
+  PlusIcon, PencilIcon, TrashIcon, SparklesIcon, CogIcon, ChevronRightIcon,
+  CodeBracketIcon, MicrophoneIcon, PaperClipIcon, PaperAirplaneIcon,
+  XMarkIcon, ArrowPathIcon, ClipboardIcon, DocumentIcon,
+  DocumentMagnifyingGlassIcon
 } from '@heroicons/vue/24/outline'
 
-// Import components (adjust import paths as needed)
-import ModelSelector from '@/composables/ModelSelector.vue'
-import CodeCanvas from '@/composables/CodeCanvas.vue'
-import VoiceRecorder from '@/composables/VoiceRecorder.vue'
-import LoadingSpinner from '@/composables/LoadingSpinner.vue'
+// API client
+const API_BASE = 'http://localhost:8000'
 
-// --- Reactive State ---
+// Reactive state
 const chatStore = ref({
-  chats: [
-    // Example chat
-    // { id: 1, title: "Welcome", updated: new Date(), messages: [{id: 1, role: 'user', content: 'Hi', type: 'text', timestamp: Date.now()}] }
-  ],
-  activeChat: null,
-  activeChatMessages: [],
-  loading: false,
-  selectChat(id) {
-    this.activeChat = this.chats.find(c => c.id === id)
-    this.activeChatMessages = this.activeChat ? this.activeChat.messages : []
-  }
+  chats: [],
+  activeChat: null
 })
 
-const settingsStore = ref({
-  modelConfig: {
-    temperature: 1,
-    topK: 40,
-    topP: 0.95,
-    maxTokens: 1024,
-  },
-  domainProfiles: [
-    { id: 'general', name: 'General', active: true },
-    { id: 'code', name: 'Coding', active: false }
-  ],
-  agents: [
-    { id: 1, name: 'Code Helper', status: 'idle', description: 'Helps with code', type: 'assistant' }
-  ]
-})
+const messages = ref([])
+const inputMessage = ref('')
+const inputRows = ref(1)
+const isLoading = ref(false)
+const isRecording = ref(false)
+const showSettings = ref(false)
+const showCanvas = ref(false)
+const ragEnabled = ref(false)
+const canvasCode = ref('')
+const uploadedFiles = ref([])
 
+// Settings
+const temperature = ref(0.7)
+const maxTokens = ref(200)
+const selectedDomain = ref('general')
+const currentModel = ref('Phi-2')
+const selectedAction = ref(null)
+
+// UI elements
+const messageInput = ref(null)
+const messagesContainer = ref(null)
+const fileInput = ref(null)
+
+// Quick actions
 const quickActions = ref([
   { id: 'code', name: 'Code', icon: CodeBracketIcon },
   { id: 'voice', name: 'Voice', icon: MicrophoneIcon },
-  { id: 'image', name: 'Image', icon: PaperClipIcon }
+  { id: 'file', name: 'File', icon: PaperClipIcon }
 ])
-const selectedAction = ref(null)
 
+// Features
 const features = ref([
-  { name: 'Code', description: 'Write and debug code', icon: CodeBracketIcon },
-  { name: 'Voice', description: 'Voice input and output', icon: MicrophoneIcon },
-  { name: 'Image', description: 'Generate images', icon: PaperClipIcon },
-  { name: 'Chat', description: 'Conversational AI', icon: ChatBubbleLeftRightIcon }
+  { name: 'Code', description: 'Generate and debug code', icon: CodeBracketIcon },
+  { name: 'Chat', description: 'Natural conversation', icon: SparklesIcon },
+  { name: 'Voice', description: 'Speech-to-text', icon: MicrophoneIcon },
+  { name: 'Documents', description: 'Analyze documents', icon: DocumentIcon }
 ])
 
-const showSettings = ref(false)
-const showCanvas = ref(false)
-const isRecording = ref(false)
-const uploadedFiles = ref([])
-const inputMessage = ref('')
-const inputRows = ref(2)
-const canSend = computed(() => inputMessage.value.trim().length > 0 && !chatStore.value.loading)
-const showSuggestions = ref(false)
-const currentSuggestions = ref(['How can I help you?', 'Show me an example', 'Explain this code'])
-const inputStatus = ref('')
-const processingInput = ref(false)
-const editingChat = ref(false)
-const newTitle = ref('')
-const currentModel = ref('GPT-4')
-const messagesContainer = ref(null)
-const messageInput = ref(null)
-const fileInput = ref(null)
-const titleInput = ref(null)
+// Computed
+const canSend = computed(() => inputMessage.value.trim().length > 0 && !isLoading.value)
 
-// --- Methods ---
-function createNewChat() {
-  const id = Date.now()
+// Methods
+const createNewChat = () => {
   const chat = {
-    id,
+    id: Date.now().toString(),
     title: `Chat ${chatStore.value.chats.length + 1}`,
-    updated: new Date(),
-    messages: []
+    messages: [],
+    updated: new Date()
   }
   chatStore.value.chats.unshift(chat)
-  chatStore.value.selectChat(id)
+  chatStore.value.activeChat = chat
+  messages.value = []
 }
 
-function selectQuickAction(action) {
-  selectedAction.value = action.id
-}
-
-function editChatTitle(chat) {
-  editingChat.value = true
-  newTitle.value = chat.title
-  nextTick(() => titleInput.value && titleInput.value.focus())
-}
-
-function deleteChat(id) {
-  chatStore.value.chats = chatStore.value.chats.filter(c => c.id !== id)
-  if (chatStore.value.activeChat?.id === id) {
-    chatStore.value.activeChat = null
-    chatStore.value.activeChatMessages = []
+const selectChat = (chatId) => {
+  const chat = chatStore.value.chats.find(c => c.id === chatId)
+  if (chat) {
+    chatStore.value.activeChat = chat
+    messages.value = chat.messages || []
   }
 }
 
-function formatDate(date) {
-  if (!date) return ''
-  return new Date(date).toLocaleDateString()
+const deleteChat = (chatId) => {
+  chatStore.value.chats = chatStore.value.chats.filter(c => c.id !== chatId)
+  if (chatStore.value.activeChat?.id === chatId) {
+    chatStore.value.activeChat = null
+    messages.value = []
+  }
 }
 
-function formatTime(ts) {
-  if (!ts) return ''
-  return new Date(ts).toLocaleTimeString()
+const selectQuickAction = (action) => {
+  selectedAction.value = action.id
+  if (action.id === 'code') {
+    selectedDomain.value = 'code'
+    showCanvas.value = true
+  } else if (action.id === 'voice') {
+    toggleVoiceInput()
+  } else if (action.id === 'file') {
+    triggerFileUpload()
+  }
 }
 
-function copyToClipboard(content) {
-  navigator.clipboard.writeText(content)
+const selectFeature = (feature) => {
+  if (feature.name === 'Code') {
+    selectedDomain.value = 'code'
+    showCanvas.value = true
+    inputMessage.value = 'Write a Python function that '
+  } else if (feature.name === 'Voice') {
+    toggleVoiceInput()
+  } else if (feature.name === 'Documents') {
+    ragEnabled.value = true
+    triggerFileUpload()
+  }
+  
+  nextTick(() => {
+    messageInput.value?.focus()
+  })
 }
 
-function regenerateResponse(message) {
-  // Stub: Add your logic
-  alert('Regenerate response for: ' + message.content)
+const sendMessage = async () => {
+  if (!canSend.value) return
+  
+  const userMessage = {
+    id: Date.now(),
+    role: 'user',
+    content: inputMessage.value,
+    timestamp: new Date()
+  }
+  
+  messages.value.push(userMessage)
+  const userInput = inputMessage.value
+  inputMessage.value = ''
+  inputRows.value = 1
+  isLoading.value = true
+  
+  // Update chat
+  if (chatStore.value.activeChat) {
+    chatStore.value.activeChat.messages = messages.value
+    chatStore.value.activeChat.updated = new Date()
+  }
+  
+  try {
+    const endpoint = ragEnabled.value ? '/api/chat-rag/' : '/api/chat-text/'
+    
+    const response = await fetch(`${API_BASE}${endpoint}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        messages: [{ role: 'user', content: userInput }],
+        temperature: temperature.value,
+        domain: selectedDomain.value,
+        max_tokens: maxTokens.value,
+        use_rag: ragEnabled.value
+      })
+    })
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    
+    const data = await response.json()
+    
+    const assistantMessage = {
+      id: Date.now() + 1,
+      role: 'assistant', 
+      content: data.output,
+      timestamp: new Date(),
+      model: currentModel.value,
+      latency: data.latency_ms
+    }
+    
+    messages.value.push(assistantMessage)
+    
+    // Update chat
+    if (chatStore.value.activeChat) {
+      chatStore.value.activeChat.messages = messages.value
+      chatStore.value.activeChat.updated = new Date()
+    }
+    
+  } catch (error) {
+    console.error('Send message error:', error)
+    const errorMessage = {
+      id: Date.now() + 1,
+      role: 'assistant',
+      content: `Error: ${error.message}. Please check if the backend server is running on ${API_BASE}`,
+      timestamp: new Date(),
+      error: true
+    }
+    messages.value.push(errorMessage)
+  } finally {
+    isLoading.value = false
+    scrollToBottom()
+  }
 }
 
-function shareMessage(message) {
-  // Stub: Add your logic
-  alert('Share message: ' + message.content)
-}
-
-function selectFeature(feature) {
-  // Stub: Add your logic
-  alert('Selected feature: ' + feature.name)
-}
-
-function getFileIcon(type) {
-  // You can expand this for more types
-  if (type.startsWith('image/')) return PaperClipIcon
-  if (type === 'application/pdf') return PaperClipIcon
-  return PaperClipIcon
-}
-
-function removeFile(name) {
-  uploadedFiles.value = uploadedFiles.value.filter(f => f.name !== name)
-}
-
-function triggerFileUpload() {
-  fileInput.value && fileInput.value.click()
-}
-
-function handleFileUpload(e) {
-  const files = Array.from(e.target.files)
-  uploadedFiles.value.push(...files)
-  e.target.value = ''
-}
-
-function handleInputKeydown(e) {
+const handleInputKeydown = (e) => {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault()
     sendMessage()
   }
 }
 
-function handleInputChange(e) {
-  inputRows.value = inputMessage.value.split('\n').length
+const autoResize = () => {
+  const lines = inputMessage.value.split('\n').length
+  inputRows.value = Math.min(Math.max(lines, 1), 6)
 }
 
-function sendMessage() {
-  if (!canSend.value) return
-  const msg = {
-    id: Date.now(),
-    role: 'user',
-    content: inputMessage.value,
-    type: 'text',
-    timestamp: Date.now()
-  }
-  if (chatStore.value.activeChat) {
-    chatStore.value.activeChat.messages.push(msg)
-    chatStore.value.activeChatMessages = chatStore.value.activeChat.messages
-    chatStore.value.activeChat.updated = new Date()
-  }
-  inputMessage.value = ''
-}
-
-function applySuggestion(suggestion) {
-  inputMessage.value = suggestion
-}
-
-function handleVoiceInput(data) {
-  inputMessage.value = data.transcript || ''
-}
-
-function onRecordingStart() {
-  isRecording.value = true
-}
-
-function onRecordingStop() {
-  isRecording.value = false
-}
-
-function toggleVoice() {
+const toggleVoice = () => {
   isRecording.value = !isRecording.value
 }
 
-function generateAudioOverview() {
-  alert('Audio overview generated!')
-}
-
-function onModelChange(model) {
-  currentModel.value = model
-}
-
-function saveChatTitle() {
-  if (chatStore.value.activeChat) {
-    chatStore.value.activeChat.title = newTitle.value
-    editingChat.value = false
+const toggleVoiceInput = async () => {
+  if (!navigator.mediaDevices) {
+    alert('Voice input not supported in this browser')
+    return
+  }
+  
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    isRecording.value = true
+    
+    // Simulate voice processing
+    setTimeout(() => {
+      isRecording.value = false
+      inputMessage.value = "Voice input transcribed..."
+      stream.getTracks().forEach(track => track.stop())
+    }, 3000)
+    
+  } catch (error) {
+    console.error('Voice input error:', error)
+    alert('Could not access microphone')
   }
 }
 
-function cancelEditTitle() {
-  editingChat.value = false
+const toggleRAG = () => {
+  ragEnabled.value = !ragEnabled.value
 }
 
-function configureAgent(agent) {
-  alert('Configure agent: ' + agent.name)
+const triggerFileUpload = () => {
+  fileInput.value?.click()
 }
 
+const handleFileUpload = async (e) => {
+  const files = Array.from(e.target.files)
+  
+  for (const file of files) {
+    uploadedFiles.value.push(file)
+    
+    // Upload to RAG system if enabled
+    if (ragEnabled.value) {
+      try {
+        const formData = new FormData()
+        formData.append('files', file)
+        
+        const response = await fetch(`${API_BASE}/api/chat-rag/upload-documents`, {
+          method: 'POST',
+          body: formData
+        })
+        
+        if (response.ok) {
+          console.log(`Uploaded ${file.name} to RAG system`)
+        }
+      } catch (error) {
+        console.error('File upload error:', error)
+      }
+    }
+  }
+  
+  e.target.value = ''
+}
+
+const removeFile = (fileName) => {
+  uploadedFiles.value = uploadedFiles.value.filter(f => f.name !== fileName)
+}
+
+const runCode = () => {
+  if (canvasCode.value.trim()) {
+    // Add code execution logic here
+    console.log('Running code:', canvasCode.value)
+    alert('Code execution would happen here')
+  }
+}
+
+const copyToClipboard = (text) => {
+  navigator.clipboard.writeText(text)
+}
+
+const regenerateResponse = (message) => {
+  // Find the user message that prompted this response
+  const messageIndex = messages.value.indexOf(message)
+  if (messageIndex > 0) {
+    const userMessage = messages.value[messageIndex - 1]
+    if (userMessage.role === 'user') {
+      inputMessage.value = userMessage.content
+      sendMessage()
+    }
+  }
+}
+
+const editChatTitle = (chat) => {
+  const newTitle = prompt('Enter new chat title:', chat.title)
+  if (newTitle && newTitle.trim()) {
+    chat.title = newTitle.trim()
+  }
+}
+
+const formatDate = (date) => {
+  if (!date) return ''
+  return new Date(date).toLocaleDateString()
+}
+
+const formatTime = (time) => {
+  if (!time) return ''
+  return new Date(time).toLocaleTimeString()
+}
+
+const scrollToBottom = () => {
+  nextTick(() => {
+    if (messagesContainer.value) {
+      messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+    }
+  })
+}
+
+// Initialize
 onMounted(() => {
-  // Optionally scroll to bottom, focus input, etc.
+  createNewChat()
+  messageInput.value?.focus()
 })
 </script>
