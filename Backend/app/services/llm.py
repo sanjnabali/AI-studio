@@ -44,21 +44,20 @@ customer engagement. Create compelling, persuasive content that resonates with t
         }
     
     async def initialize(self):
-        """Initialize the model asynchronously"""
-        logger.info(f"Initializing LLM service with model: {self.model_name}")
-        
+        """Load tokenizer and model asynchronously"""
+        if self.initialized:
+            return
+        logger.info(f"Initializing model '{self.model_name}' on {self.device}...")
+
         try:
-            # Load tokenizer
+            # Tokenizer
             self.tokenizer = AutoTokenizer.from_pretrained(
-                self.model_name, 
-                trust_remote_code=True
+                self.model_name, trust_remote_code=True
             )
-            
-            # Set pad token
             if self.tokenizer.pad_token is None:
                 self.tokenizer.pad_token = self.tokenizer.eos_token
-            
-            # Quantization config for memory efficiency
+
+            # Quantization for GPU
             quantization_config = None
             if self.device == "cuda":
                 quantization_config = BitsAndBytesConfig(
@@ -67,18 +66,18 @@ customer engagement. Create compelling, persuasive content that resonates with t
                     bnb_4bit_quant_type="nf4",
                     bnb_4bit_compute_dtype=torch.bfloat16
                 )
-            
+
             # Load model
             self.model = AutoModelForCausalLM.from_pretrained(
                 self.model_name,
-                quantization_config=quantization_config,
                 device_map="auto" if self.device == "cuda" else None,
                 torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
+                quantization_config=quantization_config,
                 trust_remote_code=True
             )
-            
-            logger.info(f"Model loaded successfully on {self.device}")
-            
+            self.initialized = True
+            logger.info(f"Model loaded successfully on {self.device}.")
+
         except Exception as e:
             logger.error(f"Failed to initialize model: {e}")
             raise
