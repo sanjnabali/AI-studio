@@ -180,7 +180,7 @@
         <!-- Messages Area -->
         <div class="flex-1 flex flex-col">
           <!-- Messages -->
-          <div ref="messagesContainer" class="flex-1 overflow-y-auto p-4 space-y-6">
+          <div ref="messagesContainer" class="flex-1 overflow-y-auto p-4 space-y-6 scroll-smooth">
             <!-- Welcome Message -->
             <div v-if="!messages.length" class="text-center py-12">
               <div class="w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
@@ -274,6 +274,9 @@
                 </div>
               </div>
             </div>
+
+            <!-- Auto-scroll anchor -->
+            <div ref="scrollAnchor" class="h-1"></div>
           </div>
 
           <!-- Input Area -->
@@ -459,6 +462,25 @@
             </div>
           </div>
         </div>
+
+        <!-- Data Management -->
+        <div class="border-t border-gray-200 dark:border-gray-700 pt-4">
+          <h4 class="font-medium text-gray-700 dark:text-gray-300 mb-3">Data Management</h4>
+          <div class="space-y-2">
+            <button
+              @click="exportChats"
+              class="w-full px-3 py-2 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded-lg"
+            >
+              Export Chats
+            </button>
+            <button
+              @click="clearAllChats"
+              class="w-full px-3 py-2 text-sm bg-red-500 hover:bg-red-600 text-white rounded-lg"
+            >
+              Clear All Chats
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -475,7 +497,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import {
   PlusIcon, PencilIcon, TrashIcon, SparklesIcon, CogIcon, ChevronRightIcon,
   CodeBracketIcon, MicrophoneIcon, PaperClipIcon, PaperAirplaneIcon,
@@ -483,8 +505,10 @@ import {
   DocumentMagnifyingGlassIcon
 } from '@heroicons/vue/24/outline'
 
-// API client
+// Constants
 const API_BASE = 'http://localhost:8000'
+const STORAGE_KEY = 'ai-studio-chats'
+const SETTINGS_KEY = 'ai-studio-settings'
 
 // Reactive state
 const chatStore = ref({
@@ -513,6 +537,7 @@ const selectedAction = ref(null)
 // UI elements
 const messageInput = ref(null)
 const messagesContainer = ref(null)
+const scrollAnchor = ref(null)
 const fileInput = ref(null)
 
 // Quick actions
@@ -533,274 +558,288 @@ const features = ref([
 // Computed
 const canSend = computed(() => inputMessage.value.trim().length > 0 && !isLoading.value)
 
-// Methods
+// Watchers
+watch(() => chatStore.value, (newStore) => {
+  saveToStorage()
+}, { deep: true })
+
+watch(() => messages.value, () => {
+  scrollToBottom()
+}, { deep: true })
+
+watch(() => isLoading.value, (loading) => {
+  if (!loading) {
+    nextTick(() => scrollToBottom())
+  }
+})
+
+// Storage functions
+const saveToStorage = () => {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      chats: chatStore.value.chats,
+      activeChat: chatStore.value.activeChat
+    }))
+    
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({
+      temperature: temperature.value,
+      maxTokens: maxTokens.value,
+      selectedDomain: selectedDomain.value,
+      currentModel: currentModel.value,
+      ragEnabled: ragEnabled.value
+    }))
+  } catch (error) {
+    console.warn('Failed to save to localStorage:', error)
+  }
+}
+
+const loadFromStorage = () => {
+  try {
+    const chatData = localStorage.getItem(STORAGE_KEY)
+    if (chatData) {
+      const parsed = JSON.parse(chatData)
+      chatStore.value.chats = parsed.chats || []
+      
+      // Restore active chat and messages
+      if (parsed.activeChat && chatStore.value.chats.length > 0) {
+        const activeChat = chatStore.value.chats.find(c => c.id === parsed.activeChat.id)
+        if (activeChat) {
+          chatStore.value.activeChat = activeChat
+          messages.value = activeChat.messages || []
+        } else {
+          chatStore.value.activeChat = chatStore.value.chats[0]
+          messages.value = chatStore.value.chats[0].messages || []
+        }
+      }
+    }
+    
+    const settingsData = localStorage.getItem(SETTINGS_KEY)
+    if (settingsData) {
+      const settings = JSON.parse(settingsData)
+      temperature.value = settings.temperature || 0.7
+      maxTokens.value = settings.maxTokens || 200
+      selectedDomain.value = settings.selectedDomain || 'general'
+      currentModel.value = settings.currentModel || 'Phi-2'
+      ragEnabled.value = settings.ragEnabled || false
+    }
+  } catch (error) {
+    console.warn('Failed to load from localStorage:', error)
+  }
+}
+
+// Chat methods
 const createNewChat = () => {
   const chat = {
     id: Date.now().toString(),
     title: `Chat ${chatStore.value.chats.length + 1}`,
     messages: [],
-    updated: new Date()
+    created: new Date().toISOString(),
+    updated: new Date().toISOString()
   }
   chatStore.value.chats.unshift(chat)
   chatStore.value.activeChat = chat
   messages.value = []
-}
+  inputMessage.value = ''
+  selectedAction.value = null
 
+  saveToStorage()
+  nextTick(() => {
+    messageInput.value.focus()
+  })
+}
 const selectChat = (chatId) => {
   const chat = chatStore.value.chats.find(c => c.id === chatId)
   if (chat) {
     chatStore.value.activeChat = chat
     messages.value = chat.messages || []
+    inputMessage.value = ''
+    selectedAction.value = null
+
+    saveToStorage()
+    nextTick(() => {
+      messageInput.value.focus()
+    })
   }
 }
-
+const editChatTitle = (chat) => {
+  const newTitle = prompt('Edit Chat Title', chat.title)
+  if (newTitle !== null && newTitle.trim() !== '') {
+    chat.title = newTitle.trim()
+    chat.updated = new Date().toISOString()
+    saveToStorage()
+  }
+}
 const deleteChat = (chatId) => {
-  chatStore.value.chats = chatStore.value.chats.filter(c => c.id !== chatId)
-  if (chatStore.value.activeChat?.id === chatId) {
+  if (confirm('Are you sure you want to delete this chat?')) {
+    chatStore.value.chats = chatStore.value.chats.filter(c => c.id !== chatId)
+    if (chatStore.value.activeChat?.id === chatId) {
+      if (chatStore.value.chats.length > 0) {
+        chatStore.value.activeChat = chatStore.value.chats[0]
+        messages.value = chatStore.value.activeChat.messages || []
+      } else {
+        chatStore.value.activeChat = null
+        messages.value = []
+      }
+    }
+    saveToStorage()
+  }
+}
+const clearAllChats = () => {
+  if (confirm('Are you sure you want to clear all chats? This action cannot be undone.')) {
+    chatStore.value.chats = []
     chatStore.value.activeChat = null
     messages.value = []
+    saveToStorage()
   }
 }
+const exportChats = () => {
+  const dataStr = JSON.stringify(chatStore.value.chats, null, 2)
+  const blob = new Blob([dataStr], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'ai-studio-chats.json'
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 
 const selectQuickAction = (action) => {
   selectedAction.value = action.id
   if (action.id === 'code') {
-    selectedDomain.value = 'code'
-    showCanvas.value = true
+    createNewChat()
+    inputMessage.value = 'Generate a code snippet for...'
   } else if (action.id === 'voice') {
-    toggleVoiceInput()
+    toggleVoice()
   } else if (action.id === 'file') {
     triggerFileUpload()
   }
-}
-
-const selectFeature = (feature) => {
-  if (feature.name === 'Code') {
-    selectedDomain.value = 'code'
-    showCanvas.value = true
-    inputMessage.value = 'Write a Python function that '
-  } else if (feature.name === 'Voice') {
-    toggleVoiceInput()
-  } else if (feature.name === 'Documents') {
-    ragEnabled.value = true
-    triggerFileUpload()
-  }
-  
   nextTick(() => {
-    messageInput.value?.focus()
+    messageInput.value.focus()
   })
 }
-
-const sendMessage = async () => {
-  if (!canSend.value) return
-  
-  const userMessage = {
-    id: Date.now(),
-    role: 'user',
-    content: inputMessage.value,
-    timestamp: new Date()
+const selectFeature = (feature) => {
+  if (feature.name === 'Code') {
+    createNewChat()
+    inputMessage.value = 'Generate a code snippet for...'
+  } else if (feature.name === 'Voice') {
+    toggleVoice()
+  } else if (feature.name === 'Documents') {
+    triggerFileUpload()
+  } else {
+    createNewChat()
   }
-  
-  messages.value.push(userMessage)
-  const userInput = inputMessage.value
-  inputMessage.value = ''
-  inputRows.value = 1
-  isLoading.value = true
-  
-  // Update chat
-  if (chatStore.value.activeChat) {
-    chatStore.value.activeChat.messages = messages.value
-    chatStore.value.activeChat.updated = new Date()
-  }
-  
-  try {
-    const endpoint = ragEnabled.value ? '/api/chat-rag/' : '/api/chat-text/'
-    
-    const response = await fetch(`${API_BASE}${endpoint}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        messages: [{ role: 'user', content: userInput }],
-        temperature: temperature.value,
-        domain: selectedDomain.value,
-        max_tokens: maxTokens.value,
-        use_rag: ragEnabled.value
-      })
-    })
-    
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
-    }
-    
-    const data = await response.json()
-    
-    const assistantMessage = {
-      id: Date.now() + 1,
-      role: 'assistant', 
-      content: data.output,
-      timestamp: new Date(),
-      model: currentModel.value,
-      latency: data.latency_ms
-    }
-    
-    messages.value.push(assistantMessage)
-    
-    // Update chat
-    if (chatStore.value.activeChat) {
-      chatStore.value.activeChat.messages = messages.value
-      chatStore.value.activeChat.updated = new Date()
-    }
-    
-  } catch (error) {
-    console.error('Send message error:', error)
-    const errorMessage = {
-      id: Date.now() + 1,
-      role: 'assistant',
-      content: `Error: ${error.message}. Please check if the backend server is running on ${API_BASE}`,
-      timestamp: new Date(),
-      error: true
-    }
-    messages.value.push(errorMessage)
-  } finally {
-    isLoading.value = false
-    scrollToBottom()
-  }
+  nextTick(() => {
+    messageInput.value.focus()
+  })
 }
-
+const formatDate = (isoString) => {
+  const date = new Date(isoString)
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+}
+const formatTime = (isoString) => {
+  const date = new Date(isoString)
+  return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+}
+const autoResize = () => {
+  nextTick(() => {
+    const el = messageInput.value
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight}px`
+    inputRows.value = Math.min(Math.ceil(el.scrollHeight / 24), 6) // Assuming line-height ~24px
+  })
+}
 const handleInputKeydown = (e) => {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault()
-    sendMessage()
-  }
-}
-
-const autoResize = () => {
-  const lines = inputMessage.value.split('\n').length
-  inputRows.value = Math.min(Math.max(lines, 1), 6)
-}
-
-const toggleVoice = () => {
-  isRecording.value = !isRecording.value
-}
-
-const toggleVoiceInput = async () => {
-  if (!navigator.mediaDevices) {
-    alert('Voice input not supported in this browser')
-    return
-  }
-  
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-    isRecording.value = true
-    
-    // Simulate voice processing
-    setTimeout(() => {
-      isRecording.value = false
-      inputMessage.value = "Voice input transcribed..."
-      stream.getTracks().forEach(track => track.stop())
-    }, 3000)
-    
-  } catch (error) {
-    console.error('Voice input error:', error)
-    alert('Could not access microphone')
-  }
-}
-
-const toggleRAG = () => {
-  ragEnabled.value = !ragEnabled.value
-}
-
-const triggerFileUpload = () => {
-  fileInput.value?.click()
-}
-
-const handleFileUpload = async (e) => {
-  const files = Array.from(e.target.files)
-  
-  for (const file of files) {
-    uploadedFiles.value.push(file)
-    
-    // Upload to RAG system if enabled
-    if (ragEnabled.value) {
-      try {
-        const formData = new FormData()
-        formData.append('files', file)
-        
-        const response = await fetch(`${API_BASE}/api/chat-rag/upload-documents`, {
-          method: 'POST',
-          body: formData
-        })
-        
-        if (response.ok) {
-          console.log(`Uploaded ${file.name} to RAG system`)
-        }
-      } catch (error) {
-        console.error('File upload error:', error)
-      }
-    }
-  }
-  
-  e.target.value = ''
-}
-
-const removeFile = (fileName) => {
-  uploadedFiles.value = uploadedFiles.value.filter(f => f.name !== fileName)
-}
-
-const runCode = () => {
-  if (canvasCode.value.trim()) {
-    // Add code execution logic here
-    console.log('Running code:', canvasCode.value)
-    alert('Code execution would happen here')
-  }
-}
-
-const copyToClipboard = (text) => {
-  navigator.clipboard.writeText(text)
-}
-
-const regenerateResponse = (message) => {
-  // Find the user message that prompted this response
-  const messageIndex = messages.value.indexOf(message)
-  if (messageIndex > 0) {
-    const userMessage = messages.value[messageIndex - 1]
-    if (userMessage.role === 'user') {
-      inputMessage.value = userMessage.content
+    if (canSend.value) {
       sendMessage()
     }
   }
 }
+const sendMessage = async () => {
+  if (!canSend.value) return
 
-const editChatTitle = (chat) => {
-  const newTitle = prompt('Enter new chat title:', chat.title)
-  if (newTitle && newTitle.trim()) {
-    chat.title = newTitle.trim()
+  const userMessage = {
+    id: Date.now().toString(),
+    role: 'user',
+    content: inputMessage.value.trim(),
+    timestamp: new Date().toISOString(),
+    model: currentModel.value
+  }
+
+  messages.value.push(userMessage)
+  if (chatStore.value.activeChat) {
+    chatStore.value.activeChat.messages.push(userMessage)
+    chatStore.value.activeChat.updated = new Date().toISOString()
+  }
+
+  inputMessage.value = ''
+  inputRows.value = 1
+  isLoading.value = true
+
+  try {
+    const startTime = performance.now()
+    const response = await fetch(`${API_BASE}/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: userMessage.content,
+        model: currentModel.value,
+        temperature: temperature.value,
+        max_tokens: maxTokens.value,
+        domain: selectedDomain.value,
+        rag: ragEnabled.value,
+        files: uploadedFiles.value.map(f => f.name)
+      })
+    })
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.statusText}`)
+    }
+
+    const data = await response.json()
+    const latency = performance.now() - startTime
+
+    const assistantMessage = {
+      id: Date.now().toString() + '-resp',
+      role: 'assistant',
+      content: data.reply,
+      timestamp: new Date().toISOString(),
+      model: currentModel.value,
+      latency
+    }
+
+    messages.value.push(assistantMessage)
+    if (chatStore.value.activeChat) {
+      chatStore.value.activeChat.messages.push(assistantMessage)
+      chatStore.value.activeChat.updated = new Date().toISOString()
+    }
+
+    // Clear uploaded files after sending
+    uploadedFiles.value = []
+  } catch (error) {
+    console.error('Error sending message:', error)
+    alert('Failed to get response from AI. Please try again.')
+  } finally {
+    isLoading.value = false
+    saveToStorage()
   }
 }
-
-const formatDate = (date) => {
-  if (!date) return ''
-  return new Date(date).toLocaleDateString()
-}
-
-const formatTime = (time) => {
-  if (!time) return ''
-  return new Date(time).toLocaleTimeString()
-}
-
 const scrollToBottom = () => {
   nextTick(() => {
-    if (messagesContainer.value) {
-      messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+    if (scrollAnchor.value) {
+      scrollAnchor.value.scrollIntoView({ behavior: 'smooth' })
     }
   })
 }
 
-// Initialize
-onMounted(() => {
-  createNewChat()
-  messageInput.value?.focus()
-})
+const copyToClipboard = (text) => {
+  navigator.clipboard.writeText(text).then(() => {
+    alert('Message copied to clipboard')
+  }).catch(err => {
+    console.error('Failed to copy text: ', err)
+  })
+}
+
 </script>
