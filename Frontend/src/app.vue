@@ -3,7 +3,7 @@
   <div id="app" class="min-h-screen bg-gray-50 dark:bg-gray-900">
     <!-- Global Loading Indicator -->
     <div
-      v-if="authStore.isLoading"
+      v-if="authStore.isLoading && !authStore.isInitialized"
       class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
     >
       <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-xl">
@@ -50,10 +50,9 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onErrorCaptured, ref } from 'vue'
+import { onMounted, onErrorCaptured, ref, watch, nextTick } from 'vue'
 import { useAuthStore } from './store/auth'
 import { useRouter, useRoute } from 'vue-router'
-
 
 const authStore = useAuthStore()
 const router = useRouter()
@@ -62,31 +61,45 @@ const route = useRoute()
 const globalError = ref<string | null>(null)
 
 onMounted(async () => {
-  console.log('App mounted, initializing auth...')
+  console.log('🚀 App mounted, initializing...')
 
-  // Initialize authentication
+  // Initialize authentication first
   await authStore.initializeAuth()
 
-  console.log('Auth initialized, current state:', {
+  console.log('✅ Auth initialized, current state:', {
     isAuthenticated: authStore.isAuthenticated,
+    hasUser: !!authStore.user,
+    hasToken: !!authStore.token,
     path: route.path
   })
-
-  // Auto-redirect logic with delay to ensure state is settled
-  setTimeout(() => {
-    if (!authStore.isAuthenticated && route.path !== '/auth') {
-      console.log('Redirecting unauthenticated user to auth')
-      router.push('/auth')
-    } else if (authStore.isAuthenticated && route.path === '/auth') {
-      console.log('Redirecting authenticated user to studio')
-      router.push('/')
-    }
-  }, 100)
 })
+
+// Auth navigation is handled by the auth.vue component and router guards
+
+// Watch for initialization completion
+watch(
+  () => authStore.isInitialized,
+  (isInitialized) => {
+    if (isInitialized) {
+      console.log('🎯 Auth initialization complete, handling navigation...')
+      
+      // Small delay to ensure router is ready
+      setTimeout(() => {
+        if (!authStore.isAuthenticated && route.path !== '/auth') {
+          console.log('🔀 Redirecting unauthenticated user to auth')
+          router.push('/auth')
+        } else if (authStore.isAuthenticated && route.path === '/auth') {
+          console.log('🔀 Redirecting authenticated user to studio')
+          router.push('/')
+        }
+      }, 100)
+    }
+  }
+)
 
 // Global error handler
 onErrorCaptured((error: Error) => {
-  console.error('Global error caught:', error)
+  console.error('💥 Global error caught:', error)
   globalError.value = error.message || 'An unexpected error occurred'
   return false
 })
@@ -95,13 +108,18 @@ function clearError() {
   globalError.value = null
 }
 
-// Listen for auth state changes
-authStore.$subscribe(() => {
-  if (!authStore.isAuthenticated && route.path !== '/auth') {
-    router.push('/auth')
-  }
-})
-
+// Listen for auth state changes from the store
+watch(
+  () => authStore.isAuthenticated,
+  (newValue, oldValue) => {
+    console.log('🔄 Auth store subscription triggered:', {
+      isAuthenticated: newValue,
+      wasAuthenticated: oldValue,
+      path: route.path
+    })
+  },
+  { immediate: false }
+)
 </script>
 
 <style>

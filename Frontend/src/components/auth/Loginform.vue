@@ -1,4 +1,4 @@
-<!-- src/components/auth/LoginForm.vue -->
+<!-- src/components/auth/LoginForm.vue - Enhanced with Debug Logging -->
 <template>
   <div class="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
     <div class="max-w-md w-full space-y-8">
@@ -97,12 +97,37 @@
           </div>
         </div>
 
+        <!-- Debug Info (Development Only) -->
+        <div v-if="isDev" class="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3 text-xs">
+          <div class="font-semibold text-yellow-800 dark:text-yellow-200 mb-2">Debug Info:</div>
+          <div class="space-y-1 text-yellow-700 dark:text-yellow-300">
+            <div>Auth Loading: {{ authStore.isLoading }}</div>
+            <div>Auth Initialized: {{ authStore.isInitialized }}</div>
+            <div>Is Authenticated: {{ authStore.isAuthenticated }}</div>
+            <div>Has User: {{ !!authStore.user }}</div>
+            <div>Has Token: {{ !!authStore.token }}</div>
+            <div>LocalStorage Token: {{ localStorageToken }}</div>
+            <div>LocalStorage User: {{ localStorageUser }}</div>
+            <div>Current Route: {{ $route.path }}</div>
+          </div>
+        </div>
+
         <!-- Error Display -->
         <div v-if="authStore.error" class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
           <div class="flex">
             <ExclamationTriangleIcon class="h-5 w-5 text-red-400 mr-2" />
             <div class="text-sm text-red-800 dark:text-red-200">
               {{ authStore.error }}
+            </div>
+          </div>
+        </div>
+
+        <!-- Success Display -->
+        <div v-if="loginSuccess" class="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3">
+          <div class="flex">
+            <CheckCircleIcon class="h-5 w-5 text-green-400 mr-2" />
+            <div class="text-sm text-green-800 dark:text-green-200">
+              Login successful! Redirecting to AI Studio...
             </div>
           </div>
         </div>
@@ -117,6 +142,31 @@
               <div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
             </span>
             {{ authStore.isLoading ? 'Signing in...' : 'Sign in' }}
+          </button>
+        </div>
+
+        <!-- Debug Actions (Development Only) -->
+        <div v-if="isDev" class="flex space-x-2">
+          <button
+            type="button"
+            @click="forceNavigation"
+            class="flex-1 px-3 py-2 text-xs bg-yellow-500 text-white rounded hover:bg-yellow-600"
+          >
+            Force Navigate
+          </button>
+          <button
+            type="button"
+            @click="clearAllStorage"
+            class="flex-1 px-3 py-2 text-xs bg-red-500 text-white rounded hover:bg-red-600"
+          >
+            Clear Storage
+          </button>
+          <button
+            type="button"
+            @click="logDebugInfo"
+            class="flex-1 px-3 py-2 text-xs bg-blue-500 text-white rounded hover:bg-blue-600"
+          >
+            Log Debug
           </button>
         </div>
 
@@ -162,13 +212,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '../../store/auth'
 import {
   SparklesIcon,
   EyeIcon,
   EyeSlashIcon,
-  ExclamationTriangleIcon
+  ExclamationTriangleIcon,
+  CheckCircleIcon
 } from '@heroicons/vue/24/outline'
 
 interface Emits {
@@ -178,6 +230,8 @@ interface Emits {
 
 const emit = defineEmits<Emits>()
 const authStore = useAuthStore()
+const router = useRouter()
+const route = useRoute()
 
 const form = ref({
   email: '',
@@ -186,25 +240,142 @@ const form = ref({
 })
 
 const showPassword = ref(false)
+const loginSuccess = ref(false)
+const isDev = computed(() => import.meta.env.DEV)
 
 const canSubmit = computed(() => {
-  return form.value.email.trim() && 
-         form.value.password.trim() && 
+  return form.value.email.trim() &&
+         form.value.password.trim() &&
          !authStore.isLoading
 })
+
+const localStorageToken = computed(() => !!localStorage.getItem('auth_token'))
+const localStorageUser = computed(() => !!localStorage.getItem('user_data'))
 
 async function handleLogin() {
   if (!canSubmit.value) return
 
-  authStore.clearError()
-  
-  const success = await authStore.login({
-    email: form.value.email.trim(),
-    password: form.value.password
+  console.log('🔐 LOGIN: Starting login process...')
+  console.log('🔐 LOGIN: Form data:', {
+    email: form.value.email,
+    hasPassword: !!form.value.password,
+    rememberMe: form.value.rememberMe
   })
 
-  if (success) {
-    emit('login-success')
+  authStore.clearError()
+  loginSuccess.value = false
+  
+  try {
+    console.log('🔐 LOGIN: Calling auth store login...')
+    const success = await authStore.login({
+      email: form.value.email.trim(),
+      password: form.value.password
+    })
+
+    console.log('🔐 LOGIN: Auth store response:', { success })
+    console.log('🔐 LOGIN: Post-login auth state:', {
+      isAuthenticated: authStore.isAuthenticated,
+      hasUser: !!authStore.user,
+      hasToken: !!authStore.token,
+      userName: authStore.userName,
+      localStorage: {
+        token: !!localStorage.getItem('auth_token'),
+        user: !!localStorage.getItem('user_data')
+      }
+    })
+
+    if (success) {
+      console.log('✅ LOGIN: Login successful, showing success message...')
+      loginSuccess.value = true
+      
+      // Wait a bit for UI feedback
+      await new Promise(resolve => setTimeout(resolve, 500))
+      
+      console.log('🔐 LOGIN: Emitting login-success event...')
+      emit('login-success')
+      
+      // Fallback navigation after a longer delay
+      setTimeout(async () => {
+        console.log('🔐 LOGIN: Fallback navigation triggered...')
+        if (authStore.isAuthenticated && route.path === '/auth') {
+          console.log('🔐 LOGIN: Still on auth page, forcing navigation...')
+          await forceNavigation()
+        }
+      }, 2000)
+      
+    } else {
+      console.error('❌ LOGIN: Login failed')
+      loginSuccess.value = false
+    }
+  } catch (error) {
+    console.error('💥 LOGIN: Login error:', error)
+    loginSuccess.value = false
   }
 }
+
+async function forceNavigation() {
+  console.log('🚨 FORCE NAV: Attempting force navigation...')
+  
+  const redirectPath = (route.query.redirect as string) || '/'
+  console.log('🚨 FORCE NAV: Target path:', redirectPath)
+  
+  try {
+    console.log('🚨 FORCE NAV: Trying router.push...')
+    await router.push(redirectPath)
+    console.log('✅ FORCE NAV: router.push successful')
+  } catch (error) {
+    console.error('❌ FORCE NAV: router.push failed:', error)
+    
+    try {
+      console.log('🚨 FORCE NAV: Trying router.replace...')
+      await router.replace(redirectPath)
+      console.log('✅ FORCE NAV: router.replace successful')
+    } catch (replaceError) {
+      console.error('❌ FORCE NAV: router.replace failed:', replaceError)
+      
+      console.log('🚨 FORCE NAV: Using window.location.href...')
+      window.location.href = redirectPath
+    }
+  }
+}
+
+function clearAllStorage() {
+  console.log('🧹 DEBUG: Clearing all storage...')
+  localStorage.clear()
+  sessionStorage.clear()
+  authStore.clearError()
+  location.reload()
+}
+
+function logDebugInfo() {
+  console.log('🐛 DEBUG INFO:', {
+    route: {
+      path: route.path,
+      name: route.name,
+      query: route.query,
+      params: route.params
+    },
+    auth: {
+      isAuthenticated: authStore.isAuthenticated,
+      isLoading: authStore.isLoading,
+      isInitialized: authStore.isInitialized,
+      hasUser: !!authStore.user,
+      hasToken: !!authStore.token,
+      userName: authStore.userName,
+      error: authStore.error
+    },
+    localStorage: {
+      authToken: localStorage.getItem('auth_token'),
+      userData: localStorage.getItem('user_data'),
+      refreshToken: localStorage.getItem('refresh_token')
+    },
+    form: form.value,
+    loginSuccess: loginSuccess.value
+  })
+}
+
+onMounted(() => {
+  console.log('🔐 LOGIN FORM: Mounted')
+  logDebugInfo()
+})
 </script>
