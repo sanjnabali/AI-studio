@@ -37,12 +37,17 @@ class User(BaseModel):
             }
         }
 
+from pydantic import BaseModel, Field, EmailStr, validator, root_validator
+from typing import Optional
+from datetime import datetime
+import uuid
+
 class UserCreate(BaseModel):
     """User creation request model"""
     email: EmailStr
     name: str
     password: str = Field(..., min_length=6)
-    confirmPassword: str
+    confirmPassword: Optional[str] = Field(None, alias="confirm_password")
 
     @validator('password')
     def password_strength(cls, v):
@@ -50,11 +55,15 @@ class UserCreate(BaseModel):
             raise ValueError('Password must be at least 6 characters long')
         return v
 
-    @validator('confirmPassword')
-    def passwords_match(cls, v, values):
-        if 'password' in values and v != values['password']:
+    from pydantic import model_validator
+
+    @model_validator(mode='before')
+    def passwords_match(cls, values):
+        password = values.get('password')
+        confirm_password = values.get('confirmPassword')
+        if password and confirm_password and password != confirm_password:
             raise ValueError('Passwords do not match')
-        return v
+        return values
 
 class UserLogin(BaseModel):
     """User login request model"""

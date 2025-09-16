@@ -58,8 +58,10 @@ def authenticate_user(email: str, password: str) -> Optional[User]:
     """Authenticate user credentials"""
     user = get_user_by_email(email)
     if not user:
+        logger.warning(f"Authentication failed: user not found for email {email}")
         return None
     if not verify_password(password, user.hashed_password):
+        logger.warning(f"Authentication failed: incorrect password for user {email}")
         return None
     return user
 
