@@ -1,3 +1,4 @@
+<!-- src/views/Studio.vue - Enhanced with Authentication and Backend Integration -->
 <template>
   <div class="flex h-screen bg-gray-50 dark:bg-gray-900">
     <!-- Sidebar -->
@@ -5,28 +6,98 @@
       <!-- Header -->
       <div class="p-4 border-b border-gray-200 dark:border-gray-700">
         <div class="flex items-center justify-between mb-4">
-          <h1 class="text-xl font-semibold text-gray-900 dark:text-white">AI Studio</h1>
-          <button
-            @click="createNewChat"
-            class="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-            title="New Chat"
-          >
-            <PlusIcon class="w-5 h-5" />
-          </button>
+          <div class="flex items-center space-x-3">
+            <div class="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
+              <SparklesIcon class="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h1 class="text-lg font-semibold text-gray-900 dark:text-white">AI Studio</h1>
+              <p class="text-xs text-gray-500 dark:text-gray-400">{{ authStore.userName }}</p>
+            </div>
+          </div>
+          
+          <!-- User Menu -->
+          <div class="relative">
+            <button
+              @click="showUserMenu = !showUserMenu"
+              class="flex items-center space-x-2 p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+            >
+              <div class="w-6 h-6 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+                <span class="text-xs font-medium text-white">{{ userInitials }}</span>
+              </div>
+            </button>
+            
+            <!-- User Dropdown -->
+            <div
+              v-if="showUserMenu"
+              class="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-50"
+            >
+              <div class="p-3 border-b border-gray-200 dark:border-gray-700">
+                <p class="text-sm font-medium text-gray-900 dark:text-white">{{ authStore.userName }}</p>
+                <p class="text-xs text-gray-500 dark:text-gray-400">{{ authStore.userEmail }}</p>
+              </div>
+              <div class="py-1">
+                <button
+                  @click="showSettings = true; showUserMenu = false"
+                  class="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                >
+                  <CogIcon class="w-4 h-4 inline mr-2" />
+                  Settings
+                </button>
+                <button
+                  @click="handleLogout"
+                  class="w-full text-left px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700"
+                >
+                  <ArrowRightOnRectangleIcon class="w-4 h-4 inline mr-2" />
+                  Sign out
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
         
-        <!-- Quick Actions -->
-        <div class="grid grid-cols-3 gap-2">
+        <button
+          @click="createNewChat"
+          class="w-full flex items-center justify-center space-x-2 p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+        >
+          <PlusIcon class="w-5 h-5" />
+          <span>New Chat</span>
+        </button>
+      </div>
+
+      <!-- System Status -->
+      <div class="p-3 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-medium text-gray-600 dark:text-gray-400">System Status</span>
           <button
-            v-for="action in quickActions"
-            :key="action.id"
-            @click="selectQuickAction(action)"
-            class="flex flex-col items-center p-2 text-xs bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg text-center transition-colors"
-            :class="{ 'bg-blue-100 dark:bg-blue-900/20 text-blue-600': selectedAction === action.id }"
+            @click="refreshSystemStatus"
+            class="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded"
           >
-            <component :is="action.icon" class="w-4 h-4 mb-1" />
-            {{ action.name }}
+            <ArrowPathIcon class="w-3 h-3" :class="{ 'animate-spin': isRefreshing }" />
           </button>
+        </div>
+        <div class="space-y-1">
+          <div class="flex items-center justify-between">
+            <span class="text-xs text-gray-500 dark:text-gray-400">AI Models</span>
+            <div class="flex items-center space-x-1">
+              <div class="w-2 h-2 rounded-full" :class="systemStatusColor"></div>
+              <span class="text-xs text-gray-600 dark:text-gray-300">{{ systemStatusText }}</span>
+            </div>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-xs text-gray-500 dark:text-gray-400">Code Execution</span>
+            <div class="flex items-center space-x-1">
+              <div class="w-2 h-2 bg-green-500 rounded-full"></div>
+              <span class="text-xs text-gray-600 dark:text-gray-300">Ready</span>
+            </div>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-xs text-gray-500 dark:text-gray-400">Voice Processing</span>
+            <div class="flex items-center space-x-1">
+              <div class="w-2 h-2 bg-green-500 rounded-full"></div>
+              <span class="text-xs text-gray-600 dark:text-gray-300">Ready</span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -127,8 +198,8 @@
                 <span>{{ currentModel }}</span>
                 <span>•</span>
                 <span class="flex items-center space-x-1">
-                  <div class="w-2 h-2 bg-green-500 rounded-full"></div>
-                  <span>Connected</span>
+                  <div class="w-2 h-2 rounded-full" :class="systemStatusColor"></div>
+                  <span>{{ systemStatusText }}</span>
                 </span>
               </p>
             </div>
@@ -140,9 +211,10 @@
               v-model="currentModel"
               class="px-3 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
             >
-              <option value="Phi-2">Phi-2 (General)</option>
-              <option value="Phi-2-Code">Phi-2 (Code)</option>
-              <option value="T5-Small">T5 (Summarization)</option>
+              <option value="gemini-pro">Gemini Pro</option>
+              <option value="gemini-pro-vision">Gemini Pro Vision</option>
+              <option value="claude-3">Claude 3</option>
+              <option value="gpt-4">GPT-4</option>
             </select>
 
             <!-- Feature Toggles -->
@@ -151,16 +223,9 @@
                 @click="showCanvas = !showCanvas"
                 class="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
                 :class="{ 'bg-blue-100 dark:bg-blue-900/20 text-blue-600': showCanvas }"
+                title="Toggle Code Canvas"
               >
                 <CodeBracketIcon class="w-5 h-5" />
-              </button>
-
-              <button
-                @click="toggleVoice"
-                class="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                :class="{ 'bg-red-100 dark:bg-red-900/20 text-red-600': isRecording }"
-              >
-                <MicrophoneIcon class="w-5 h-5" />
               </button>
 
               <button
@@ -235,8 +300,11 @@
                   <div class="flex items-center justify-between mt-2 text-xs opacity-70">
                     <span>{{ formatTime(message.timestamp) }}</span>
                     <div class="flex items-center space-x-2">
-                      <span v-if="message.model">{{ message.model }}</span>
-                      <span v-if="message.latency">{{ message.latency.toFixed(0) }}ms</span>
+                      <span v-if="message.metadata?.model">{{ message.metadata.model }}</span>
+                      <span v-if="message.metadata?.latency">{{ Math.round(message.metadata.latency) }}ms</span>
+                      <span v-if="message.metadata?.sources?.length" class="text-green-600">
+                        {{ message.metadata.sources.length }} sources
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -262,7 +330,7 @@
             </div>
 
             <!-- Typing Indicator -->
-            <div v-if="isLoading" class="flex justify-start">
+            <div v-if="chatStore.loading" class="flex justify-start">
               <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl px-4 py-3 shadow-sm">
                 <div class="flex items-center space-x-2">
                   <div class="flex space-x-1">
@@ -272,6 +340,29 @@
                   </div>
                   <span class="text-sm text-gray-500 dark:text-gray-400">AI is thinking...</span>
                 </div>
+              </div>
+            </div>
+
+            <!-- Error Display -->
+            <div v-if="chatStore.error" class="flex justify-center">
+              <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 max-w-md">
+                <div class="flex items-center">
+                  <ExclamationTriangleIcon class="h-5 w-5 text-red-400 mr-2" />
+                  <div>
+                    <div class="text-sm font-medium text-red-800 dark:text-red-200">
+                      Message failed
+                    </div>
+                    <div class="text-sm text-red-600 dark:text-red-300 mt-1">
+                      {{ chatStore.error }}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  @click="chatStore.clearError()"
+                  class="mt-2 text-sm text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-200"
+                >
+                  Dismiss
+                </button>
               </div>
             </div>
 
@@ -292,15 +383,11 @@
               </button>
 
               <!-- Voice Input -->
-              <button
-                @click="toggleVoiceInput"
-                :disabled="isRecording"
-                class="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                :class="{ 'bg-red-100 text-red-600': isRecording }"
-                title="Voice Input"
-              >
-                <MicrophoneIcon class="w-5 h-5" />
-              </button>
+              <VoiceRecorder
+                @recording-complete="handleVoiceInput"
+                @recording-start="() => {}"
+                @recording-stop="() => {}"
+              />
 
               <!-- Message Input -->
               <div class="flex-1 relative">
@@ -312,7 +399,7 @@
                   placeholder="Message AI Studio..."
                   class="w-full px-4 py-3 pr-12 border border-gray-300 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                   :rows="inputRows"
-                  :disabled="isLoading"
+                  :disabled="chatStore.loading"
                 ></textarea>
                 
                 <!-- Send Button -->
@@ -338,7 +425,8 @@
                 <option value="code">Code</option>
                 <option value="creative">Creative</option>
                 <option value="analysis">Analysis</option>
-                <option value="summarizer">Summarizer</option>
+                <option value="academic">Academic</option>
+                <option value="business">Business</option>
               </select>
 
               <div v-if="ragEnabled" class="flex items-center space-x-2 ml-4">
@@ -373,112 +461,49 @@
           class="w-96 border-l border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
         >
           <div class="h-full flex flex-col">
-            <div class="p-3 border-b border-gray-200 dark:border-gray-700">
+            <div class="p-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
               <h3 class="font-medium text-gray-900 dark:text-white">Code Canvas</h3>
+              <select
+                v-model="canvasLanguage"
+                class="text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white px-2 py-1"
+              >
+                <option v-for="lang in chatStore.supportedLanguages" :key="lang" :value="lang">
+                  {{ lang.charAt(0).toUpperCase() + lang.slice(1) }}
+                </option>
+              </select>
             </div>
-            <div class="flex-1 p-4">
+            <div class="flex-1 relative">
               <textarea
                 v-model="canvasCode"
-                class="w-full h-full font-mono text-sm bg-gray-900 text-green-400 border-none outline-none resize-none p-4 rounded"
+                class="w-full h-full font-mono text-sm bg-gray-900 text-green-400 border-none outline-none resize-none p-4"
                 placeholder="// Your code here..."
               ></textarea>
             </div>
-            <div class="p-3 border-t border-gray-200 dark:border-gray-700">
+            <div class="p-3 border-t border-gray-200 dark:border-gray-700 space-y-2">
               <button
                 @click="runCode"
-                class="w-full px-3 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm"
+                :disabled="codeExecuting"
+                class="w-full px-3 py-2 bg-green-500 hover:bg-green-600 disabled:bg-gray-400 text-white rounded-lg text-sm flex items-center justify-center"
               >
-                Run Code
+                <span v-if="codeExecuting" class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></span>
+                {{ codeExecuting ? 'Running...' : 'Run Code' }}
               </button>
+              
+              <!-- Code Output -->
+              <div v-if="codeOutput" class="mt-3 p-3 bg-gray-100 dark:bg-gray-700 rounded text-sm font-mono max-h-40 overflow-y-auto">
+                <div v-if="codeOutput.success" class="text-green-700 dark:text-green-300">
+                  <div class="font-semibold mb-1">Output:</div>
+                  <pre class="whitespace-pre-wrap">{{ codeOutput.output }}</pre>
+                  <div class="text-xs mt-2 opacity-70">
+                    Executed in {{ codeOutput.executionTime }}ms
+                  </div>
+                </div>
+                <div v-else class="text-red-700 dark:text-red-300">
+                  <div class="font-semibold mb-1">Error:</div>
+                  <pre class="whitespace-pre-wrap">{{ codeOutput.error }}</pre>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Settings Panel -->
-    <div
-      v-if="showSettings"
-      class="w-80 bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700"
-    >
-      <div class="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-        <h3 class="font-semibold text-gray-900 dark:text-white">Settings</h3>
-        <button
-          @click="showSettings = false"
-          class="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded"
-        >
-          <XMarkIcon class="w-4 h-4" />
-        </button>
-      </div>
-      
-      <div class="p-4 space-y-6">
-        <!-- Temperature -->
-        <div>
-          <div class="flex items-center justify-between mb-2">
-            <label class="text-sm font-medium text-gray-700 dark:text-gray-300">Temperature</label>
-            <span class="text-sm text-gray-500 dark:text-gray-400">{{ temperature }}</span>
-          </div>
-          <input
-            v-model.number="temperature"
-            type="range"
-            min="0"
-            max="1"
-            step="0.1"
-            class="w-full"
-          />
-        </div>
-
-        <!-- Max Tokens -->
-        <div>
-          <div class="flex items-center justify-between mb-2">
-            <label class="text-sm font-medium text-gray-700 dark:text-gray-300">Max Tokens</label>
-            <span class="text-sm text-gray-500 dark:text-gray-400">{{ maxTokens }}</span>
-          </div>
-          <input
-            v-model.number="maxTokens"
-            type="range"
-            min="50"
-            max="500"
-            step="50"
-            class="w-full"
-          />
-        </div>
-
-        <!-- System Status -->
-        <div class="border-t border-gray-200 dark:border-gray-700 pt-4">
-          <h4 class="font-medium text-gray-700 dark:text-gray-300 mb-3">System Status</h4>
-          <div class="space-y-2">
-            <div class="flex items-center justify-between">
-              <span class="text-sm text-gray-600 dark:text-gray-400">Models Loaded</span>
-              <div class="w-2 h-2 bg-green-500 rounded-full"></div>
-            </div>
-            <div class="flex items-center justify-between">
-              <span class="text-sm text-gray-600 dark:text-gray-400">RAG Engine</span>
-              <div class="w-2 h-2 bg-green-500 rounded-full"></div>
-            </div>
-            <div class="flex items-center justify-between">
-              <span class="text-sm text-gray-600 dark:text-gray-400">Voice Processing</span>
-              <div class="w-2 h-2 bg-green-500 rounded-full"></div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Data Management -->
-        <div class="border-t border-gray-200 dark:border-gray-700 pt-4">
-          <h4 class="font-medium text-gray-700 dark:text-gray-300 mb-3">Data Management</h4>
-          <div class="space-y-2">
-            <button
-              @click="exportChats"
-              class="w-full px-3 py-2 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded-lg"
-            >
-              Export Chats
-            </button>
-            <button
-              @click="clearAllChats"
-              class="w-full px-3 py-2 text-sm bg-red-500 hover:bg-red-600 text-white rounded-lg"
-            >
-              Clear All Chats
-            </button>
           </div>
         </div>
       </div>
@@ -496,260 +521,180 @@
   </div>
 </template>
 
-<script setup>
-import { ref, computed, onMounted, nextTick, watch } from 'vue'
+<script setup lang="ts">
+import { ref, computed, onMounted, nextTick, watch, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { useAuthStore } from '../store/auth'
+import { useChatStore } from '../store/chat'
+import VoiceRecorder from '../composables/VoiceRecorder.vue'
 import {
   PlusIcon, PencilIcon, TrashIcon, SparklesIcon, CogIcon, ChevronRightIcon,
-  CodeBracketIcon, MicrophoneIcon, PaperClipIcon, PaperAirplaneIcon,
-  XMarkIcon, ArrowPathIcon, ClipboardIcon, DocumentIcon,
-  DocumentMagnifyingGlassIcon
+  CodeBracketIcon, PaperClipIcon, PaperAirplaneIcon, XMarkIcon, ArrowPathIcon, 
+  ClipboardIcon, DocumentIcon, DocumentMagnifyingGlassIcon, ExclamationTriangleIcon,
+  ArrowRightOnRectangleIcon
 } from '@heroicons/vue/24/outline'
 
-// Constants
-const API_BASE = 'http://localhost:8000'
-const STORAGE_KEY = 'ai-studio-chats'
-const SETTINGS_KEY = 'ai-studio-settings'
+const router = useRouter()
+const authStore = useAuthStore()
+const chatStore = useChatStore()
 
 // Reactive state
-const chatStore = ref({
-  chats: [],
-  activeChat: null
-})
-
-const messages = ref([])
+const messages = computed(() => chatStore.activeChatMessages)
 const inputMessage = ref('')
 const inputRows = ref(1)
-const isLoading = ref(false)
-const isRecording = ref(false)
 const showSettings = ref(false)
 const showCanvas = ref(false)
+const showUserMenu = ref(false)
 const ragEnabled = ref(false)
 const canvasCode = ref('')
-const uploadedFiles = ref([])
+const canvasLanguage = ref('python')
+const uploadedFiles = ref<File[]>([])
+const codeExecuting = ref(false)
+const codeOutput = ref<any>(null)
+const isRefreshing = ref(false)
 
 // Settings
-const temperature = ref(0.7)
-const maxTokens = ref(200)
 const selectedDomain = ref('general')
-const currentModel = ref('Phi-2')
-const selectedAction = ref(null)
+const currentModel = ref('gemini-pro')
 
 // UI elements
-const messageInput = ref(null)
-const messagesContainer = ref(null)
-const scrollAnchor = ref(null)
-const fileInput = ref(null)
-
-// Quick actions
-const quickActions = ref([
-  { id: 'code', name: 'Code', icon: CodeBracketIcon },
-  { id: 'voice', name: 'Voice', icon: MicrophoneIcon },
-  { id: 'file', name: 'File', icon: PaperClipIcon }
-])
+const messageInput = ref<HTMLInputElement | null>(null)
+const messagesContainer = ref<HTMLElement | null>(null)
+const scrollAnchor = ref<HTMLElement | null>(null)
+const fileInput = ref<HTMLInputElement | null>(null)
 
 // Features
 const features = ref([
   { name: 'Code', description: 'Generate and debug code', icon: CodeBracketIcon },
   { name: 'Chat', description: 'Natural conversation', icon: SparklesIcon },
-  { name: 'Voice', description: 'Speech-to-text', icon: MicrophoneIcon },
   { name: 'Documents', description: 'Analyze documents', icon: DocumentIcon }
 ])
 
 // Computed
-const canSend = computed(() => inputMessage.value.trim().length > 0 && !isLoading.value)
+const canSend = computed(() => inputMessage.value.trim().length > 0 && !chatStore.loading)
+const userInitials = computed(() => {
+  const name = authStore.userName
+  return name.split(' ').map(n => n[0]).join('').toUpperCase() || 'U'
+})
+
+const systemStatusColor = computed(() => {
+  if (!chatStore.systemHealth) return 'bg-gray-500'
+  return chatStore.isSystemReady ? 'bg-green-500' : 'bg-red-500'
+})
+
+const systemStatusText = computed(() => {
+  if (!chatStore.systemHealth) return 'Unknown'
+  return chatStore.isSystemReady ? 'Ready' : 'Loading'
+})
 
 // Watchers
-watch(() => chatStore.value, (newStore) => {
-  saveToStorage()
-}, { deep: true })
-
 watch(() => messages.value, () => {
   scrollToBottom()
 }, { deep: true })
 
-watch(() => isLoading.value, (loading) => {
+watch(() => chatStore.loading, (loading) => {
   if (!loading) {
     nextTick(() => scrollToBottom())
   }
 })
 
-// Storage functions
-const saveToStorage = () => {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      chats: chatStore.value.chats,
-      activeChat: chatStore.value.activeChat
-    }))
-    
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify({
-      temperature: temperature.value,
-      maxTokens: maxTokens.value,
-      selectedDomain: selectedDomain.value,
-      currentModel: currentModel.value,
-      ragEnabled: ragEnabled.value
-    }))
-  } catch (error) {
-    console.warn('Failed to save to localStorage:', error)
+// Lifecycle
+onMounted(async () => {
+  if (!authStore.isAuthenticated) {
+    router.push('/auth')
+    return
   }
-}
-
-const loadFromStorage = () => {
-  try {
-    const chatData = localStorage.getItem(STORAGE_KEY)
-    if (chatData) {
-      const parsed = JSON.parse(chatData)
-      chatStore.value.chats = parsed.chats || []
-      
-      // Restore active chat and messages
-      if (parsed.activeChat && chatStore.value.chats.length > 0) {
-        const activeChat = chatStore.value.chats.find(c => c.id === parsed.activeChat.id)
-        if (activeChat) {
-          chatStore.value.activeChat = activeChat
-          messages.value = activeChat.messages || []
-        } else {
-          chatStore.value.activeChat = chatStore.value.chats[0]
-          messages.value = chatStore.value.chats[0].messages || []
-        }
-      }
-    }
-    
-    const settingsData = localStorage.getItem(SETTINGS_KEY)
-    if (settingsData) {
-      const settings = JSON.parse(settingsData)
-      temperature.value = settings.temperature || 0.7
-      maxTokens.value = settings.maxTokens || 200
-      selectedDomain.value = settings.selectedDomain || 'general'
-      currentModel.value = settings.currentModel || 'Phi-2'
-      ragEnabled.value = settings.ragEnabled || false
-    }
-  } catch (error) {
-    console.warn('Failed to load from localStorage:', error)
-  }
-}
-
-// Chat methods
-const createNewChat = () => {
-  const chat = {
-    id: Date.now().toString(),
-    title: `Chat ${chatStore.value.chats.length + 1}`,
-    messages: [],
-    created: new Date().toISOString(),
-    updated: new Date().toISOString()
-  }
-  chatStore.value.chats.unshift(chat)
-  chatStore.value.activeChat = chat
-  messages.value = []
-  inputMessage.value = ''
-  selectedAction.value = null
-
-  saveToStorage()
-  nextTick(() => {
+  
+  await chatStore.initialize()
+  
+  if (messageInput.value) {
     messageInput.value.focus()
+  }
+})
+
+onUnmounted(() => {
+  // Clean up any timers or listeners
+})
+
+// Methods
+async function handleLogout() {
+  showUserMenu.value = false
+  await authStore.logout()
+  router.push('/auth')
+}
+
+async function refreshSystemStatus() {
+  isRefreshing.value = true
+  await chatStore.checkSystemHealth()
+  await chatStore.getModelStatus()
+  setTimeout(() => {
+    isRefreshing.value = false
+  }, 1000)
+}
+
+function createNewChat() {
+  chatStore.createChat()
+  inputMessage.value = ''
+  showUserMenu.value = false
+  nextTick(() => {
+    messageInput.value?.focus()
   })
 }
-const selectChat = (chatId) => {
-  const chat = chatStore.value.chats.find(c => c.id === chatId)
-  if (chat) {
-    chatStore.value.activeChat = chat
-    messages.value = chat.messages || []
-    inputMessage.value = ''
-    selectedAction.value = null
 
-    saveToStorage()
-    nextTick(() => {
-      messageInput.value.focus()
-    })
-  }
+function selectChat(chatId: string) {
+  chatStore.selectChat(chatId)
+  inputMessage.value = ''
+  nextTick(() => {
+    messageInput.value?.focus()
+  })
 }
-const editChatTitle = (chat) => {
+
+function editChatTitle(chat: any) {
   const newTitle = prompt('Edit Chat Title', chat.title)
   if (newTitle !== null && newTitle.trim() !== '') {
-    chat.title = newTitle.trim()
-    chat.updated = new Date().toISOString()
-    saveToStorage()
+    chatStore.updateChatTitle(chat.id, newTitle.trim())
   }
 }
-const deleteChat = (chatId) => {
+
+function deleteChat(chatId: string) {
   if (confirm('Are you sure you want to delete this chat?')) {
-    chatStore.value.chats = chatStore.value.chats.filter(c => c.id !== chatId)
-    if (chatStore.value.activeChat?.id === chatId) {
-      if (chatStore.value.chats.length > 0) {
-        chatStore.value.activeChat = chatStore.value.chats[0]
-        messages.value = chatStore.value.activeChat.messages || []
-      } else {
-        chatStore.value.activeChat = null
-        messages.value = []
-      }
-    }
-    saveToStorage()
+    chatStore.deleteChat(chatId)
   }
-}
-const clearAllChats = () => {
-  if (confirm('Are you sure you want to clear all chats? This action cannot be undone.')) {
-    chatStore.value.chats = []
-    chatStore.value.activeChat = null
-    messages.value = []
-    saveToStorage()
-  }
-}
-const exportChats = () => {
-  const dataStr = JSON.stringify(chatStore.value.chats, null, 2)
-  const blob = new Blob([dataStr], { type: 'application/json' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = 'ai-studio-chats.json'
-  a.click()
-  URL.revokeObjectURL(url)
 }
 
-
-const selectQuickAction = (action) => {
-  selectedAction.value = action.id
-  if (action.id === 'code') {
-    createNewChat()
-    inputMessage.value = 'Generate a code snippet for...'
-  } else if (action.id === 'voice') {
-    toggleVoice()
-  } else if (action.id === 'file') {
-    triggerFileUpload()
-  }
-  nextTick(() => {
-    messageInput.value.focus()
-  })
-}
-const selectFeature = (feature) => {
+function selectFeature(feature: any) {
   if (feature.name === 'Code') {
     createNewChat()
     inputMessage.value = 'Generate a code snippet for...'
-  } else if (feature.name === 'Voice') {
-    toggleVoice()
   } else if (feature.name === 'Documents') {
     triggerFileUpload()
   } else {
     createNewChat()
   }
   nextTick(() => {
-    messageInput.value.focus()
+    messageInput.value?.focus()
   })
 }
-const formatDate = (isoString) => {
-  const date = new Date(isoString)
-  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+
+function formatDate(date: Date) {
+  return new Date(date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
-const formatTime = (isoString) => {
-  const date = new Date(isoString)
-  return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+
+function formatTime(date: Date) {
+  return new Date(date).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
 }
-const autoResize = () => {
+
+function autoResize() {
   nextTick(() => {
-    const el = messageInput.value
-    el.style.height = 'auto'
-    el.style.height = `${el.scrollHeight}px`
-    inputRows.value = Math.min(Math.ceil(el.scrollHeight / 24), 6) // Assuming line-height ~24px
+    if (messageInput.value) {
+      messageInput.value.style.height = 'auto'
+      messageInput.value.style.height = `${messageInput.value.scrollHeight}px`
+      inputRows.value = Math.min(Math.ceil(messageInput.value.scrollHeight / 24), 6)
+    }
   })
 }
-const handleInputKeydown = (e) => {
+
+function handleInputKeydown(e: KeyboardEvent) {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault()
     if (canSend.value) {
@@ -757,76 +702,26 @@ const handleInputKeydown = (e) => {
     }
   }
 }
-const sendMessage = async () => {
+
+async function sendMessage() {
   if (!canSend.value) return
 
-  const userMessage = {
-    id: Date.now().toString(),
-    role: 'user',
-    content: inputMessage.value.trim(),
-    timestamp: new Date().toISOString(),
-    model: currentModel.value
-  }
-
-  messages.value.push(userMessage)
-  if (chatStore.value.activeChat) {
-    chatStore.value.activeChat.messages.push(userMessage)
-    chatStore.value.activeChat.updated = new Date().toISOString()
-  }
-
+  const content = inputMessage.value.trim()
   inputMessage.value = ''
   inputRows.value = 1
-  isLoading.value = true
 
-  try {
-    const startTime = performance.now()
-    const response = await fetch(`${API_BASE}/chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        message: userMessage.content,
-        model: currentModel.value,
-        temperature: temperature.value,
-        max_tokens: maxTokens.value,
-        domain: selectedDomain.value,
-        rag: ragEnabled.value,
-        files: uploadedFiles.value.map(f => f.name)
-      })
-    })
+  await chatStore.sendMessage(content, {
+    domain: selectedDomain.value,
+    useRAG: ragEnabled.value,
+    temperature: 0.7,
+    maxTokens: 1024
+  })
 
-    if (!response.ok) {
-      throw new Error(`API error: ${response.statusText}`)
-    }
-
-    const data = await response.json()
-    const latency = performance.now() - startTime
-
-    const assistantMessage = {
-      id: Date.now().toString() + '-resp',
-      role: 'assistant',
-      content: data.reply,
-      timestamp: new Date().toISOString(),
-      model: currentModel.value,
-      latency
-    }
-
-    messages.value.push(assistantMessage)
-    if (chatStore.value.activeChat) {
-      chatStore.value.activeChat.messages.push(assistantMessage)
-      chatStore.value.activeChat.updated = new Date().toISOString()
-    }
-
-    // Clear uploaded files after sending
-    uploadedFiles.value = []
-  } catch (error) {
-    console.error('Error sending message:', error)
-    alert('Failed to get response from AI. Please try again.')
-  } finally {
-    isLoading.value = false
-    saveToStorage()
-  }
+  // Clear uploaded files after sending
+  uploadedFiles.value = []
 }
-const scrollToBottom = () => {
+
+function scrollToBottom() {
   nextTick(() => {
     if (scrollAnchor.value) {
       scrollAnchor.value.scrollIntoView({ behavior: 'smooth' })
@@ -834,12 +729,70 @@ const scrollToBottom = () => {
   })
 }
 
-const copyToClipboard = (text) => {
-  navigator.clipboard.writeText(text).then(() => {
-    alert('Message copied to clipboard')
-  }).catch(err => {
-    console.error('Failed to copy text: ', err)
-  })
+async function copyToClipboard(text: string) {
+  try {
+    await navigator.clipboard.writeText(text)
+    // Could show a toast notification here
+  } catch (err) {
+    console.error('Failed to copy text:', err)
+  }
 }
 
+async function regenerateResponse(message: any) {
+  // Find the user message before this assistant message
+  const messageIndex = messages.value.findIndex(m => m.id === message.id)
+  if (messageIndex > 0) {
+    const userMessage = messages.value[messageIndex - 1]
+    if (userMessage.role === 'user') {
+      await chatStore.sendMessage(userMessage.content, {
+        domain: selectedDomain.value,
+        useRAG: ragEnabled.value
+      })
+    }
+  }
+}
+
+function toggleRAG() {
+  ragEnabled.value = !ragEnabled.value
+}
+
+function triggerFileUpload() {
+  fileInput.value?.click()
+}
+
+async function handleFileUpload(event: Event) {
+  const files = Array.from((event.target as HTMLInputElement).files || [])
+  if (files.length === 0) return
+
+  const result = await chatStore.uploadDocuments(files)
+  if (result.success) {
+    uploadedFiles.value = [...uploadedFiles.value, ...files]
+  }
+}
+
+function removeFile(fileName: string) {
+  uploadedFiles.value = uploadedFiles.value.filter(f => f.name !== fileName)
+}
+
+async function handleVoiceInput(audioBlob: Blob) {
+  const audioFile = new File([audioBlob], 'voice_input.wav', { type: 'audio/wav' })
+  const result = await chatStore.transcribeAudio(audioFile)
+  
+  if (result.success && result.transcription) {
+    inputMessage.value = result.transcription
+    autoResize()
+    messageInput.value?.focus()
+  }
+}
+
+async function runCode() {
+  if (!canvasCode.value.trim()) return
+  
+  codeExecuting.value = true
+  codeOutput.value = null
+  
+  const result = await chatStore.executeCode(canvasCode.value, canvasLanguage.value)
+  codeOutput.value = result
+  codeExecuting.value = false
+}
 </script>
