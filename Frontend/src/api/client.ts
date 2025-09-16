@@ -92,7 +92,7 @@ class ApiClient {
 
   constructor(config: ApiConfig = { baseURL: '', timeout: 30000 }) {
     this.client = axios.create({
-      baseURL: config.baseURL,
+      baseURL: config.baseURL.endsWith('/api') ? config.baseURL.slice(0, -4) : config.baseURL,
       timeout: config.timeout,
       headers: {
         'Content-Type': 'application/json',
@@ -375,7 +375,7 @@ class ApiClient {
 
 // Create singleton instance
 export const apiClient = new ApiClient({
-  baseURL: import.meta.env.VITE_API_BASE_URL || '',
+  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000',
   timeout: 30000
 })
 

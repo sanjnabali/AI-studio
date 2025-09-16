@@ -18,6 +18,8 @@ import subprocess
 import sys
 import random
 
+
+
 # Suppress warnings early
 warnings.filterwarnings("ignore", category=UserWarning)
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -250,12 +252,31 @@ def generate_general_response(user_message: str, message_lower: str) -> str:
     """Generate general conversational responses"""
     if any(greeting in message_lower for greeting in ["hello", "hi", "hey", "good morning", "good evening"]):
         return "Hello! I'm your AI assistant, ready to help with a variety of tasks including:\n\n• **Coding** - Python, JavaScript, HTML, CSS and more\n• **Creative Writing** - Stories, poems, articles\n• **Analysis** - Data analysis, research, insights\n• **General Questions** - Explanations, advice, information\n\nWhat can I help you with today?"
-    
+
     elif any(question in message_lower for question in ["how", "what", "why", "when", "where"]):
         return f"Great question about '{user_message[:50]}...'! I'd be happy to help explain this.\n\nTo give you the most helpful response, could you tell me:\n• What specific aspect interests you most?\n• Are you looking for a simple overview or detailed explanation?\n• Is this for learning, work, or another purpose?\n\nI'm here to help make complex topics clear and understandable!"
-    
+
     else:
         return f"I understand you're asking about: '{user_message[:50]}...'\n\nI'm ready to help! I can assist with:\n• Detailed explanations\n• Step-by-step guidance  \n• Examples and illustrations\n• Practical applications\n\nWhat specific information would be most helpful for you?"
+
+def generate_code_response(user_message: str, message_lower: str) -> str:
+    """Generate simple code templates"""
+    if "hello" in message_lower and "world" in message_lower:
+        return "```python\nprint('Hello, World!')\n```"
+    elif "loop" in message_lower or "for" in message_lower:
+        return "```python\nfor i in range(5):\n    print(i)\n```"
+    elif "function" in message_lower or "def" in message_lower:
+        return "```python\ndef my_function():\n    print('Hello from function!')\n\nmy_function()\n```"
+    elif "html" in message_lower:
+        return "```html\n<!DOCTYPE html>\n<html>\n<head>\n    <title>Hello</title>\n</head>\n<body>\n    <h1>Hello, World!</h1>\n</body>\n</html>\n```"
+    elif "javascript" in message_lower or "js" in message_lower:
+        return "```javascript\nconsole.log('Hello, World!');\n```"
+    else:
+        return "```python\n# Simple example\nprint('Hello!')\n```"
+
+def generate_enhanced_code_response(user_message: str, message_lower: str) -> str:
+    """Generate enhanced code responses using intelligent templates"""
+    return generate_intelligent_template_response(user_message)
 
 # Smart hybrid approach - use model when available, templates as fallback
 async def smart_code_generation(user_message: str, domain: str = "code") -> str:

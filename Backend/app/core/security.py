@@ -10,7 +10,8 @@ import re
 from typing import Optional, List, Dict, Any, Set
 from datetime import datetime, timedelta
 from passlib.context import CryptContext
-from jose import JWTError, jwt
+# Using PyJWT for JWT handling
+import jwt
 from fastapi import HTTPException, Security, Depends, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import logging
@@ -90,7 +91,7 @@ def verify_token(token: str) -> Dict[str, Any]:
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         return payload
-    except JWTError as e:
+    except Exception as e:
         logger.warning(f"Token verification failed: {e}")
         raise AuthenticationError("Invalid token")
 

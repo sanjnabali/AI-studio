@@ -5,7 +5,11 @@ pydantic>=2.5.0
 python-multipart>=0.0.6
 
 # CORS and middleware
-python-jose[cryptography]>=3.3.0
+PyJWT>=2.0.0
+
+# Password hashing
+bcrypt==4.0.1
+passlib[bcrypt]>=1.7.4
 
 # AI and ML libraries (with fallback options)
 torch>=2.0.0
