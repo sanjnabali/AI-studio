@@ -2,7 +2,8 @@
 Configuration management for AI Studio Backend
 """
 
-from pydantic import BaseSettings, validator
+from pydantic_settings import BaseSettings
+from pydantic import validator
 from typing import Optional, List, Dict, Any
 import os
 from pathlib import Path
@@ -121,7 +122,7 @@ class Settings(BaseSettings):
         "voice_transcription": True,
         "image_generation": False,
         "streaming": True,
-        "authentication": False,
+        "authentication": True,
         "rate_limiting": False
     }
     

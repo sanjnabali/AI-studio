@@ -529,7 +529,7 @@ import { useChatStore } from '../store/chat'
 import VoiceRecorder from '../composables/VoiceRecorder.vue'
 import {
   PlusIcon, PencilIcon, TrashIcon, SparklesIcon, CogIcon, ChevronRightIcon,
-  CodeBracketIcon, PaperClipIcon, PaperAirplaneIcon, XMarkIcon, ArrowPathIcon, 
+  CodeBracketIcon, PaperClipIcon, PaperAirplaneIcon, XMarkIcon, ArrowPathIcon,
   ClipboardIcon, DocumentIcon, DocumentMagnifyingGlassIcon, ExclamationTriangleIcon,
   ArrowRightOnRectangleIcon
 } from '@heroicons/vue/24/outline'
@@ -558,7 +558,7 @@ const selectedDomain = ref('general')
 const currentModel = ref('gemini-pro')
 
 // UI elements
-const messageInput = ref<HTMLInputElement | null>(null)
+const messageInput = ref<HTMLTextAreaElement | null>(null)
 const messagesContainer = ref<HTMLElement | null>(null)
 const scrollAnchor = ref<HTMLElement | null>(null)
 const fileInput = ref<HTMLInputElement | null>(null)
@@ -715,7 +715,9 @@ async function sendMessage() {
     useRAG: ragEnabled.value,
     temperature: 0.7,
     maxTokens: 1024
-  })
+  });
+
+
 
   // Clear uploaded files after sending
   uploadedFiles.value = []

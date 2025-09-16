@@ -1,82 +1,65 @@
-<!-- src/views/Auth.vue -->
+<!-- src/views/auth.vue - Fixed Authentication View -->
 <template>
   <div class="min-h-screen bg-gray-50 dark:bg-gray-900">
-    <!-- Background Pattern -->
-    <div class="absolute inset-0 bg-gradient-to-br from-blue-50 to-purple-50 dark:from-gray-900 dark:to-gray-800 opacity-50"></div>
-    <div class="absolute inset-0 bg-grid-pattern opacity-5"></div>
-    
-    <!-- Content -->
-    <div class="relative">
-      <Transition
-        name="slide"
-        mode="out-in"
-        appear
-      >
-        <LoginForm
-          v-if="currentMode === 'login'"
-          @switch-mode="currentMode = $event"
-          @login-success="handleAuthSuccess"
-        />
-        <RegisterForm
-          v-else-if="currentMode === 'register'"
-          @switch-mode="currentMode = $event"
-          @register-success="handleAuthSuccess"
-        />
-        <ForgotPasswordForm
-          v-else
-          @switch-mode="currentMode = $event"
-        />
-      </Transition>
+    <div class="container mx-auto">
+      <component
+        :is="currentComponent"
+        @switch-mode="switchMode"
+        @login-success="handleAuthSuccess"
+        @register-success="handleAuthSuccess"
+      />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '../store/auth'
+
+// Import auth components
 import LoginForm from '../components/auth/Loginform.vue'
 import RegisterForm from '../components/auth/registerform.vue'
 import ForgotPasswordForm from '../components/auth/ForgotpasswordForm.vue'
 
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
 
+// State
 const currentMode = ref<'login' | 'register' | 'forgot'>('login')
 
-function handleAuthSuccess() {
-  // Redirect to main app
-  router.push('/')
+// Component mapping
+const components = {
+  login: LoginForm,
+  register: RegisterForm,
+  forgot: ForgotPasswordForm
 }
 
+// Computed
+const currentComponent = computed(() => components[currentMode.value])
+
+// Methods
+function switchMode(mode: 'login' | 'register' | 'forgot') {
+  currentMode.value = mode
+  // Clear any existing errors when switching modes
+  authStore.clearError()
+}
+
+function handleAuthSuccess() {
+  const redirectPath = (route.query.redirect as string) || '/'
+  router.push(redirectPath)
+}
+
+// Lifecycle
 onMounted(() => {
-  // If already authenticated, redirect to main app
+  // If user is already authenticated, redirect them
   if (authStore.isAuthenticated) {
-    router.push('/')
+    const redirectPath = (route.query.redirect as string) || '/'
+    router.push(redirectPath)
   }
+  
+  // Clear any existing errors
+  authStore.clearError()
 })
 </script>
-
-<style scoped>
-.bg-grid-pattern {
-  background-image: 
-    linear-gradient(rgba(0, 0, 0, 0.1) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 0, 0, 0.1) 1px, transparent 1px);
-  background-size: 20px 20px;
-}
-
-.slide-enter-active,
-.slide-leave-active {
-  transition: all 0.3s ease-in-out;
-}
-
-.slide-enter-from {
-  opacity: 0;
-  transform: translateX(30px);
-}
-
-.slide-leave-to {
-  opacity: 0;
-  transform: translateX(-30px);
-}
-</style>

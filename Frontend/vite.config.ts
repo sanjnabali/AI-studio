@@ -1,8 +1,7 @@
+// vite.config.ts
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { resolve } from 'path'
-
-const __dirname = process.cwd();
 
 export default defineConfig({
   plugins: [vue()],
@@ -12,12 +11,37 @@ export default defineConfig({
     }
   },
   server: {
-    port: 3000,
+    port: 5173,
+    host: true,
     proxy: {
       '/api': {
         target: 'http://localhost:8000',
-        changeOrigin: true
+        changeOrigin: true,
+        secure: false
+      },
+      '/health': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+        secure: false
       }
     }
+  },
+  build: {
+    target: 'es2020',
+    outDir: 'dist',
+    assetsDir: 'assets',
+    sourcemap: true,
+    rollupOptions: {
+      input: {
+        main: resolve(__dirname, 'index.html')
+      }
+    }
+  },
+  define: {
+    __VUE_OPTIONS_API__: true,
+    __VUE_PROD_DEVTOOLS__: false
+  },
+  css: {
+    postcss: './postcss.config.js'
   }
 })

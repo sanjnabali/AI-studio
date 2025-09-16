@@ -1,5 +1,6 @@
 // src/api/client.ts
-import axios, { AxiosInstance, AxiosResponse } from 'axios'
+import axios from 'axios'
+import type { AxiosInstance, AxiosResponse } from 'axios'
 
 interface ApiConfig {
   baseURL: string
@@ -89,7 +90,7 @@ class ApiClient {
   private client: AxiosInstance
   private token: string | null = null
 
-  constructor(config: ApiConfig = { baseURL: 'http://localhost:8000', timeout: 30000 }) {
+  constructor(config: ApiConfig = { baseURL: '', timeout: 30000 }) {
     this.client = axios.create({
       baseURL: config.baseURL,
       timeout: config.timeout,
@@ -168,62 +169,62 @@ class ApiClient {
   }
 
   // Authentication Methods
-  async login(credentials: LoginCredentials): Promise<AuthResponse> {
-    try {
-      const response: AxiosResponse<AuthResponse> = await this.client.post('/auth/login', credentials)
-      const { access_token, user } = response.data
-      this.setAuthHeader(access_token)
-      localStorage.setItem('user_data', JSON.stringify(user))
-      return response.data
-    } catch (error) {
-      throw this.handleApiError(error)
+    async login(credentials: LoginCredentials): Promise<AuthResponse> {
+        try {
+            const response: AxiosResponse<AuthResponse> = await this.client.post('/api/auth/login', credentials)
+            const { access_token, user } = response.data
+            this.setAuthHeader(access_token)
+            localStorage.setItem('user_data', JSON.stringify(user))
+            return response.data
+        } catch (error) {
+            throw this.handleApiError(error)
+        }
     }
-  }
 
-  async register(credentials: RegisterCredentials): Promise<AuthResponse> {
-    try {
-      const response: AxiosResponse<AuthResponse> = await this.client.post('/auth/register', credentials)
-      const { access_token, user } = response.data
-      this.setAuthHeader(access_token)
-      localStorage.setItem('user_data', JSON.stringify(user))
-      return response.data
-    } catch (error) {
-      throw this.handleApiError(error)
+    async register(credentials: RegisterCredentials): Promise<AuthResponse> {
+        try {
+            const response: AxiosResponse<AuthResponse> = await this.client.post('/api/auth/register', credentials)
+            const { access_token, user } = response.data
+            this.setAuthHeader(access_token)
+            localStorage.setItem('user_data', JSON.stringify(user))
+            return response.data
+        } catch (error) {
+            throw this.handleApiError(error)
+        }
     }
-  }
 
-  async logout(): Promise<void> {
-    try {
-      if (this.token) {
-        await this.client.post('/auth/logout')
-      }
-    } catch (error) {
-      console.warn('Logout error:', error)
-    } finally {
-      this.clearAuth()
+    async logout(): Promise<void> {
+        try {
+            if (this.token) {
+                await this.client.post('/api/auth/logout')
+            }
+        } catch (error) {
+            console.warn('Logout error:', error)
+        } finally {
+            this.clearAuth()
+        }
     }
-  }
 
-  async refreshToken(): Promise<AuthResponse> {
-    try {
-      const refreshToken = localStorage.getItem('refresh_token')
-      if (!refreshToken) {
-        throw new Error('No refresh token available')
-      }
-      
-      const response: AxiosResponse<AuthResponse> = await this.client.post('/auth/refresh', {
-        refresh_token: refreshToken
-      })
-      
-      const { access_token, user } = response.data
-      this.setAuthHeader(access_token)
-      localStorage.setItem('user_data', JSON.stringify(user))
-      return response.data
-    } catch (error) {
-      this.clearAuth()
-      throw this.handleApiError(error)
+    async refreshToken(): Promise<AuthResponse> {
+        try {
+            const refreshToken = localStorage.getItem('refresh_token')
+            if (!refreshToken) {
+                throw new Error('No refresh token available')
+            }
+            
+            const response: AxiosResponse<AuthResponse> = await this.client.post('/api/auth/refresh', {
+                refresh_token: refreshToken
+            })
+            
+            const { access_token, user } = response.data
+            this.setAuthHeader(access_token)
+            localStorage.setItem('user_data', JSON.stringify(user))
+            return response.data
+        } catch (error) {
+            this.clearAuth()
+            throw this.handleApiError(error)
+        }
     }
-  }
 
   // Chat Methods
   async sendTextMessage(request: ChatRequest): Promise<ChatResponse> {
@@ -374,7 +375,7 @@ class ApiClient {
 
 // Create singleton instance
 export const apiClient = new ApiClient({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000',
+  baseURL: import.meta.env.VITE_API_BASE_URL || '',
   timeout: 30000
 })
 

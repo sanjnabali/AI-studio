@@ -243,3 +243,11 @@ class RAGResponse(BaseModel):
 class VoiceRequest(BaseModel):
     """Voice processing request"""
     audio_format: Literal["wav", "mp3", "ogg"] = "wav"
+
+class VoiceResponse(BaseModel):
+    """Voice processing response"""
+    transcription: str
+    confidence: Optional[float] = None
+    language_detected: str = "en"
+    duration_seconds: float = 0.0
+    latency_ms: float = 0.0

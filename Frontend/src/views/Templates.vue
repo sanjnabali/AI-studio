@@ -1,111 +1,50 @@
+<!-- src/views/Templates.vue -->
 <template>
   <div class="min-h-screen bg-gray-50 dark:bg-gray-900">
-    <div class="max-w-7xl mx-auto px-4 py-8">
+    <Navbar />
+    
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div class="mb-8">
-        <h1 class="text-3xl font-bold text-gray-900 dark:text-white mb-2">Template Library</h1>
-        <p class="text-gray-600 dark:text-gray-400">Discover pre-built prompts and configurations for common tasks</p>
+        <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Templates</h1>
+        <p class="mt-2 text-gray-600 dark:text-gray-400">
+          Pre-built templates to get you started quickly
+        </p>
       </div>
 
-      <!-- Search and Filters -->
-      <div class="mb-8 flex flex-col sm:flex-row gap-4">
-        <div class="flex-1">
-          <input
-            v-model="searchQuery"
-            type="text"
-            placeholder="Search templates..."
-            class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-          />
-        </div>
-        <select
-          v-model="selectedCategory"
-          class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-        >
-          <option value="">All Categories</option>
-          <option value="coding">Coding</option>
-          <option value="writing">Writing</option>
-          <option value="analysis">Analysis</option>
-          <option value="creative">Creative</option>
-        </select>
-      </div>
-
-      <!-- Template Grid -->
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <div
-          v-for="template in filteredTemplates"
+          v-for="template in templates"
           :key="template.id"
-          class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition-shadow cursor-pointer"
+          class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 hover:shadow-md transition-shadow cursor-pointer"
           @click="useTemplate(template)"
         >
-          <div class="p-6">
-            <div class="flex items-start justify-between mb-3">
-              <div class="flex items-center space-x-2">
-                <div class="w-10 h-10 rounded-lg bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center">
-                  <component :is="getTemplateIcon(template.category)" class="w-5 h-5 text-white" />
-                </div>
-                <div>
-                  <h3 class="font-semibold text-gray-900 dark:text-white">{{ template.name }}</h3>
-                  <span class="text-xs text-gray-500 dark:text-gray-400 capitalize">{{ template.category }}</span>
-                </div>
+          <div class="flex items-start justify-between">
+            <div class="flex items-center space-x-3">
+              <div class="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
+                <component :is="template.icon" class="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h3 class="font-medium text-gray-900 dark:text-white">{{ template.name }}</h3>
+                <p class="text-sm text-gray-500 dark:text-gray-400">{{ template.category }}</p>
               </div>
             </div>
-            <p class="text-gray-600 dark:text-gray-400 text-sm mb-4">{{ template.description }}</p>
-            <div class="flex items-center justify-between">
-              <span class="text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-2 py-1 rounded">
-                {{ template.config.model }}
+          </div>
+          
+          <p class="mt-3 text-sm text-gray-600 dark:text-gray-300">{{ template.description }}</p>
+          
+          <div class="mt-4 flex items-center justify-between">
+            <div class="flex flex-wrap gap-1">
+              <span
+                v-for="tag in template.tags"
+                :key="tag"
+                class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200"
+              >
+                {{ tag }}
               </span>
-              <ChevronRightIcon class="w-4 h-4 text-gray-400" />
             </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Create Custom Template -->
-      <div class="mt-12 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-        <h2 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Create Custom Template</h2>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Template Name</label>
-            <input
-              v-model="newTemplate.name"
-              type="text"
-              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-            />
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Category</label>
-            <select
-              v-model="newTemplate.category"
-              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-            >
-              <option value="coding">Coding</option>
-              <option value="writing">Writing</option>
-              <option value="analysis">Analysis</option>
-              <option value="creative">Creative</option>
-            </select>
-          </div>
-          <div class="md:col-span-2">
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Description</label>
-            <input
-              v-model="newTemplate.description"
-              type="text"
-              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-            />
-          </div>
-          <div class="md:col-span-2">
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Prompt Template</label>
-            <textarea
-              v-model="newTemplate.prompt"
-              rows="4"
-              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-              placeholder="Enter your prompt template here..."
-            ></textarea>
-          </div>
-          <div class="md:col-span-2">
-            <button
-              @click="saveTemplate"
-              class="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium"
-            >
-              Save Template
+            
+            <button class="text-blue-600 dark:text-blue-400 text-sm font-medium hover:text-blue-800 dark:hover:text-blue-300">
+              Use Template
             </button>
           </div>
         </div>
@@ -115,160 +54,82 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { useChatStore } from '../store/chat'
-import type { Template } from '../types'
+import Navbar from '../composables/Navbar.vue'
 import {
-  ChevronRightIcon,
   CodeBracketIcon,
-  DocumentTextIcon,
+  PencilIcon,
   ChartBarIcon,
-  SparklesIcon
+  DocumentTextIcon,
+  AcademicCapIcon,
+  BriefcaseIcon
 } from '@heroicons/vue/24/outline'
 
 const router = useRouter()
-const chatStore = useChatStore()
 
-const searchQuery = ref('')
-const selectedCategory = ref('')
-
-const templates = ref<Template[]>([
+const templates = ref([
   {
-    id: '1',
-    name: 'Python Code Generator',
-    description: 'Generate clean, well-documented Python code for various tasks',
-    category: 'coding',
-    prompt: 'Write a Python function that {task}. Include docstrings, type hints, and error handling.',
-    config: {
-      model: 'gemini-pro',
-      temperature: 0.2,
-      topK: 40,
-      topP: 0.9,
-      maxTokens: 1024,
-      safetyLevel: 'medium'
-    }
+    id: 1,
+    name: 'Code Review',
+    category: 'Development',
+    description: 'Get detailed code reviews and suggestions for improvement',
+    icon: CodeBracketIcon,
+    tags: ['code', 'review', 'development'],
+    prompt: 'Please review this code and provide detailed feedback on:\n1. Code quality and best practices\n2. Potential bugs or issues\n3. Performance optimizations\n4. Suggestions for improvement\n\n```\n[Your code here]\n```'
   },
   {
-    id: '2',
-    name: 'Content Writer',
-    description: 'Create engaging content for blogs, social media, and marketing',
-    category: 'writing',
-    prompt: 'Write a {type} about {topic}. Make it engaging, informative, and appropriate for {audience}.',
-    config: {
-      model: 'gemini-pro',
-      temperature: 0.8,
-      topK: 40,
-      topP: 0.9,
-      maxTokens: 1024,
-      safetyLevel: 'medium'
-    }
+    id: 2,
+    name: 'Creative Writing',
+    category: 'Writing',
+    description: 'Generate creative stories, poems, and narrative content',
+    icon: PencilIcon,
+    tags: ['creative', 'writing', 'story'],
+    prompt: 'Help me write a creative piece. Please specify:\n- Genre (e.g., fantasy, sci-fi, mystery)\n- Setting and time period\n- Main character details\n- Plot elements or themes\n\nThen I\'ll create an engaging narrative for you.'
   },
   {
-    id: '3',
-    name: 'Data Analyst',
-    description: 'Analyze data patterns and provide actionable insights',
-    category: 'analysis',
-    prompt: 'Analyze this data: {data}. Identify key patterns, trends, and provide actionable recommendations.',
-    config: {
-      model: 'gemini-pro',
-      temperature: 0.3,
-      topK: 40,
-      topP: 0.9,
-      maxTokens: 1024,
-      safetyLevel: 'medium'
-    }
+    id: 3,
+    name: 'Data Analysis',
+    category: 'Analytics',
+    description: 'Analyze data, create visualizations, and generate insights',
+    icon: ChartBarIcon,
+    tags: ['data', 'analysis', 'visualization'],
+    prompt: 'I need help analyzing data. Please provide:\n1. Your dataset (CSV, JSON, or describe the data)\n2. What insights you\'re looking for\n3. Any specific questions about the data\n4. Preferred visualization types\n\nI\'ll help you analyze the data and create meaningful insights.'
   },
   {
-    id: '4',
-    name: 'Creative Story Writer',
-    description: 'Generate creative stories, poems, and fictional content',
-    category: 'creative',
-    prompt: 'Write a {genre} story about {theme}. Make it {tone} and approximately {length} words long.',
-    config: {
-      model: 'gemini-pro',
-      temperature: 0.9,
-      topK: 40,
-      topP: 0.9,
-      maxTokens: 1024,
-      safetyLevel: 'medium'
-    }
+    id: 4,
+    name: 'Technical Documentation',
+    category: 'Documentation',
+    description: 'Create comprehensive technical documentation',
+    icon: DocumentTextIcon,
+    tags: ['documentation', 'technical', 'API'],
+    prompt: 'Help me create technical documentation. Please specify:\n- Project/API/system to document\n- Target audience (developers, users, etc.)\n- Specific sections needed\n- Existing code or specs\n\nI\'ll create clear, comprehensive documentation.'
+  },
+  {
+    id: 5,
+    name: 'Research Assistant',
+    category: 'Research',
+    description: 'Research topics, summarize findings, and cite sources',
+    icon: AcademicCapIcon,
+    tags: ['research', 'academic', 'summary'],
+    prompt: 'I need research assistance on [TOPIC]. Please help me:\n1. Find key information and current developments\n2. Summarize main points and findings\n3. Identify reliable sources\n4. Provide citations where applicable\n\nWhat specific topic would you like me to research?'
+  },
+  {
+    id: 6,
+    name: 'Business Analysis',
+    category: 'Business',
+    description: 'Analyze business problems and provide strategic insights',
+    icon: BriefcaseIcon,
+    tags: ['business', 'strategy', 'analysis'],
+    prompt: 'Help me with business analysis. Please provide:\n- Business context or industry\n- Specific problem or opportunity\n- Available data or constraints\n- Strategic objectives\n\nI\'ll provide analysis, recommendations, and actionable insights.'
   }
 ])
 
-const newTemplate = ref<Partial<Template>>({
-  name: '',
-  description: '',
-  category: 'coding',
-  prompt: '',
-  config: {
-    model: 'gemini-pro',
-    temperature: 0.7,
-    topK: 40,
-    topP: 0.9,
-    maxTokens: 1024,
-    safetyLevel: 'medium'
-  }
-})
-
-const filteredTemplates = computed(() => {
-  return templates.value.filter(template => {
-    const matchesSearch = template.name.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
-                         template.description.toLowerCase().includes(searchQuery.value.toLowerCase())
-    const matchesCategory = !selectedCategory.value || template.category === selectedCategory.value
-    return matchesSearch && matchesCategory
+function useTemplate(template: any) {
+  // Navigate to studio with the template prompt
+  router.push({
+    name: 'studio',
+    query: { template: template.prompt }
   })
-})
-
-function getTemplateIcon(category: string) {
-  const icons = {
-    coding: CodeBracketIcon,
-    writing: DocumentTextIcon,
-    analysis: ChartBarIcon,
-    creative: SparklesIcon
-  }
-  return icons[category as keyof typeof icons] || CodeBracketIcon
-}
-
-function useTemplate(template: Template) {
-  const chat = chatStore.createChat(template.name)
-  chat.modelConfig = { ...template.config }
-  router.push('/')
-}
-
-function saveTemplate() {
-  if (newTemplate.value.name && newTemplate.value.prompt) {
-    templates.value.push({
-      id: Date.now().toString(),
-      name: newTemplate.value.name,
-      description: newTemplate.value.description || '',
-      category: newTemplate.value.category || 'coding',
-      prompt: newTemplate.value.prompt,
-      config: newTemplate.value.config || {
-        model: 'gemini-pro',
-        temperature: 0.7,
-        topK: 40,
-        topP: 0.9,
-        maxTokens: 1024,
-        safetyLevel: 'medium'
-      }
-    })
-    
-    // Reset form
-    newTemplate.value = {
-      name: '',
-      description: '',
-      category: 'coding',
-      prompt: '',
-      config: {
-        model: 'gemini-pro',
-        temperature: 0.7,
-        topK: 40,
-        topP: 0.9,
-        maxTokens: 1024,
-        safetyLevel: 'medium'
-      }
-    }
-  }
 }
 </script>

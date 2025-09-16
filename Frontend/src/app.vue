@@ -1,255 +1,124 @@
-<!-- src/App.vue - Updated -->
+<!-- src/app.vue - Fixed Main App Component -->
 <template>
-  <div id="app" class="h-screen bg-gray-50 dark:bg-gray-900" :class="{ 'dark': isDarkMode }">
-    <!-- Global Loading Overlay -->
-    <div v-if="isInitializing" class="fixed inset-0 bg-white dark:bg-gray-900 z-50 flex items-center justify-center">
-      <div class="text-center">
-        <div class="w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-4 animate-pulse">
-          <SparklesIcon class="w-8 h-8 text-white" />
-        </div>
-        <div class="text-lg font-semibold text-gray-900 dark:text-white mb-2">AI Studio</div>
-        <div class="flex items-center justify-center space-x-1">
-          <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
-          <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 0.1s"></div>
-          <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+  <div id="app" class="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <!-- Global Loading Indicator -->
+    <div
+      v-if="authStore.isLoading"
+      class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+    >
+      <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-xl">
+        <div class="flex items-center space-x-3">
+          <div class="w-6 h-6 border-3 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+          <span class="text-gray-700 dark:text-gray-300">Initializing...</span>
         </div>
       </div>
     </div>
 
-    <!-- Navigation Bar (only show for authenticated routes) -->
-    <Navbar v-if="showNavbar" />
-    
-    <!-- Main Content -->
-    <div class="flex-1" :class="{ 'pt-16': showNavbar }">
-      <router-view />
-    </div>
+    <!-- Main App Content -->
+    <router-view v-slot="{ Component }">
+      <transition name="page" mode="out-in">
+        <component :is="Component || 'div'" />
+      </transition>
+    </router-view>
 
-    <!-- Global Notifications -->
-    <div v-if="notifications.length" class="fixed top-4 right-4 space-y-2 z-40">
-      <div
-        v-for="notification in notifications"
-        :key="notification.id"
-        class="max-w-sm w-full bg-white dark:bg-gray-800 shadow-lg rounded-lg pointer-events-auto ring-1 ring-black ring-opacity-5 overflow-hidden"
-      >
-        <div class="p-4">
-          <div class="flex items-start">
-            <div class="flex-shrink-0">
-              <CheckCircleIcon v-if="notification.type === 'success'" class="h-6 w-6 text-green-400" />
-              <ExclamationTriangleIcon v-else-if="notification.type === 'warning'" class="h-6 w-6 text-yellow-400" />
-              <XCircleIcon v-else-if="notification.type === 'error'" class="h-6 w-6 text-red-400" />
-              <InformationCircleIcon v-else class="h-6 w-6 text-blue-400" />
-            </div>
-            <div class="ml-3 w-0 flex-1 pt-0.5">
-              <p class="text-sm font-medium text-gray-900 dark:text-white">
-                {{ notification.title }}
-              </p>
-              <p v-if="notification.message" class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                {{ notification.message }}
-              </p>
-            </div>
-            <div class="ml-4 flex-shrink-0 flex">
-              <button
-                @click="removeNotification(notification.id)"
-                class="bg-white dark:bg-gray-800 rounded-md inline-flex text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-              >
-                <XMarkIcon class="h-5 w-5" />
-              </button>
-            </div>
+    <!-- Global Error Handler -->
+    <div
+      v-if="globalError"
+      class="fixed bottom-4 right-4 bg-red-50 border border-red-200 rounded-lg p-4 shadow-lg max-w-sm z-40"
+    >
+      <div class="flex items-start">
+        <div class="flex-shrink-0">
+          <svg class="h-5 w-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+          </svg>
+        </div>
+        <div class="ml-3">
+          <h3 class="text-sm font-medium text-red-800">Error</h3>
+          <div class="mt-2 text-sm text-red-700">{{ globalError }}</div>
+          <div class="mt-3">
+            <button
+              @click="clearError"
+              class="text-sm bg-red-100 text-red-800 hover:bg-red-200 px-2 py-1 rounded"
+            >
+              Dismiss
+            </button>
           </div>
         </div>
-      </div>
-    </div>
-
-    <!-- Offline Indicator -->
-    <div v-if="!isOnline" class="fixed bottom-4 left-4 bg-yellow-100 dark:bg-yellow-900/20 border border-yellow-300 dark:border-yellow-700 rounded-lg p-3 shadow-lg">
-      <div class="flex items-center">
-        <ExclamationTriangleIcon class="h-5 w-5 text-yellow-600 dark:text-yellow-400 mr-2" />
-        <span class="text-sm font-medium text-yellow-800 dark:text-yellow-200">
-          You're offline. Some features may not work.
-        </span>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { onMounted, onErrorCaptured, ref } from 'vue'
 import { useAuthStore } from './store/auth'
-import { useChatStore } from './store/chat'
-import Navbar from './composables/Navbar.vue'
-import {
-  SparklesIcon,
-  CheckCircleIcon,
-  ExclamationTriangleIcon,
-  XCircleIcon,
-  InformationCircleIcon,
-  XMarkIcon
-} from '@heroicons/vue/24/outline'
+import { useRouter, useRoute } from 'vue-router'
 
-interface Notification {
-  id: string
-  type: 'success' | 'error' | 'warning' | 'info'
-  title: string
-  message?: string
-  timeout?: number
-}
 
-const route = useRoute()
 const authStore = useAuthStore()
-const chatStore = useChatStore()
+const router = useRouter()
+const route = useRoute()
 
-const isInitializing = ref(true)
-const isDarkMode = ref(false)
-const isOnline = ref(navigator.onLine)
-const notifications = ref<Notification[]>([])
-
-const showNavbar = computed(() => {
-  return authStore.isAuthenticated && route.name !== 'auth'
-})
-
-// Dark mode management
-watch(isDarkMode, (newValue) => {
-  if (newValue) {
-    document.documentElement.classList.add('dark')
-    localStorage.setItem('theme', 'dark')
-  } else {
-    document.documentElement.classList.remove('dark')
-    localStorage.setItem('theme', 'light')
-  }
-})
-
-// Online/offline status
-function updateOnlineStatus() {
-  isOnline.value = navigator.onLine
-  
-  if (navigator.onLine) {
-    addNotification({
-      type: 'success',
-      title: 'Connection restored',
-      message: 'You\'re back online',
-      timeout: 3000
-    })
-  } else {
-    addNotification({
-      type: 'warning',
-      title: 'Connection lost',
-      message: 'You\'re currently offline'
-    })
-  }
-}
-
-// Notification management
-function addNotification(notification: Omit<Notification, 'id'>) {
-  const id = Date.now().toString() + Math.random().toString(36).slice(2, 11)
-  const newNotification: Notification = {
-    id,
-    ...notification
-  }
-  
-  notifications.value.push(newNotification)
-  
-  // Auto-remove after timeout
-  if (notification.timeout !== undefined) {
-    setTimeout(() => {
-      removeNotification(id)
-    }, notification.timeout)
-  } else {
-    // Default timeout for success messages
-    if (notification.type === 'success') {
-      setTimeout(() => {
-        removeNotification(id)
-      }, 5000)
-    }
-  }
-}
-
-function removeNotification(id: string) {
-  const index = notifications.value.findIndex(n => n.id === id)
-  if (index > -1) {
-    notifications.value.splice(index, 1)
-  }
-}
-
-// Global notification system
-window.addEventListener('app-notification', (event: Event) => {
-  const customEvent = event as CustomEvent
-  addNotification(customEvent.detail)
-})
-
-// Helper function to show notifications from anywhere
-window.showNotification = addNotification
+const globalError = ref<string | null>(null)
 
 onMounted(async () => {
-  // Initialize dark mode from localStorage
-  const savedTheme = localStorage.getItem('theme')
-  if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-    isDarkMode.value = true
-  }
-
-  // Initialize auth
+  // Initialize authentication
   authStore.initializeAuth()
   
-  // Add online/offline listeners
-  window.addEventListener('online', updateOnlineStatus)
-  window.addEventListener('offline', updateOnlineStatus)
-  
-  // Global error handling
-  window.addEventListener('unhandledrejection', (event) => {
-    console.error('Unhandled promise rejection:', event.reason)
-    addNotification({
-      type: 'error',
-      title: 'Something went wrong',
-      message: 'An unexpected error occurred'
-    })
-  })
-
-  // Listen for auth state changes
-  watch(() => authStore.isAuthenticated, (isAuth) => {
-    if (isAuth) {
-      addNotification({
-        type: 'success',
-        title: 'Welcome back!',
-        message: `Signed in as ${authStore.userName}`,
-        timeout: 3000
-      })
-    }
-  })
-
-  // Listen for chat errors
-  watch(() => chatStore.error, (error) => {
-    if (error) {
-      addNotification({
-        type: 'error',
-        title: 'Chat Error',
-        message: error
-      })
-    }
-  })
-
-  // Simulate initialization delay
-  setTimeout(() => {
-    isInitializing.value = false
-  }, 1000)
+  // Auto-redirect logic
+  if (!authStore.isAuthenticated && route.path !== '/auth') {
+    router.push('/auth')
+  } else if (authStore.isAuthenticated && route.path === '/auth') {
+    router.push('/')
+  }
 })
 
-// Expose global functions
-declare global {
-  interface Window {
-    showNotification: (notification: Omit<Notification, 'id'>) => void
-  }
+// Global error handler
+onErrorCaptured((error: Error) => {
+  console.error('Global error caught:', error)
+  globalError.value = error.message || 'An unexpected error occurred'
+  return false
+})
+
+function clearError() {
+  globalError.value = null
 }
+
+// Listen for auth state changes
+authStore.$subscribe(() => {
+  if (!authStore.isAuthenticated && route.path !== '/auth') {
+    router.push('/auth')
+  }
+})
+
 </script>
 
-<style lang="postcss">
-/* Global styles */
-#app {
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+<style>
+/* Global Styles */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Scrollbar styling */
+/* Page transitions */
+.page-enter-active,
+.page-leave-active {
+  transition: all 0.3s ease;
+}
+
+.page-enter-from,
+.page-leave-to {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+/* scrollbar.css */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -260,30 +129,45 @@ declare global {
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-gray-300 dark:bg-gray-600 rounded-full;
+  @apply bg-gray-400 dark:bg-gray-600 rounded-full transition-colors duration-200;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  @apply bg-gray-400 dark:bg-gray-500;
+  @apply bg-gray-500 dark:bg-gray-500;
 }
 
-/* Custom animations */
-@keyframes slideIn {
-  from {
-    transform: translateX(100%);
-    opacity: 0;
-  }
-  to {
-    transform: translateX(0);
-    opacity: 1;
-  }
+/* ==================== */
+/* Firefox Support      */
+/* ==================== */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: theme('colors.gray.400') theme('colors.gray.100');
 }
 
-.slide-in {
-  animation: slideIn 0.3s ease-out;
+html.dark * {
+  scrollbar-color: theme('colors.gray.600') theme('colors.gray.800');
+}
+
+/* ==================== */
+/* Dark mode support    */
+/* ==================== */
+@media (prefers-color-scheme: dark) {
+  html {
+    color-scheme: dark;
+  }
 }
 
 /* Loading animations */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
 @keyframes pulse {
   0%, 100% {
     opacity: 1;
@@ -293,19 +177,69 @@ declare global {
   }
 }
 
-.animate-pulse-slow {
+.animate-pulse {
   animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
-/* Focus styles for accessibility */
-.focus-visible {
-  @apply outline-none ring-2 ring-blue-500 ring-offset-2;
+@keyframes bounce {
+  0%, 100% {
+    transform: translateY(-25%);
+    animation-timing-function: cubic-bezier(0.8, 0, 1, 1);
+  }
+  50% {
+    transform: none;
+    animation-timing-function: cubic-bezier(0, 0, 0.2, 1);
+  }
 }
 
-/* Print styles */
-@media print {
-  .no-print {
-    display: none !important;
+.animate-bounce {
+  animation: bounce 1s infinite;
+}
+
+/* Custom utility classes */
+.bg-gradient-to-r {
+  background-image: linear-gradient(to right, var(--tw-gradient-stops));
+}
+
+.from-blue-500 {
+  --tw-gradient-from: #3b82f6;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(59, 130, 246, 0));
+}
+
+.to-purple-600 {
+  --tw-gradient-to: #9333ea;
+}
+
+/* Responsive design helpers */
+.container {
+  width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+@media (min-width: 640px) {
+  .container {
+    max-width: 640px;
+  }
+}
+
+@media (min-width: 768px) {
+  .container {
+    max-width: 768px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .container {
+    max-width: 1024px;
+  }
+}
+
+@media (min-width: 1280px) {
+  .container {
+    max-width: 1280px;
   }
 }
 </style>

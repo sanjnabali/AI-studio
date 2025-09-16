@@ -5,9 +5,14 @@ import base64
 from io import BytesIO
 
 # Example: Using Stable Diffusion from diffusers
-from diffusers import StableDiffusionPipeline
-import torch
-from PIL import Image
+try:
+    from diffusers import StableDiffusionPipeline
+    import torch
+    from PIL import Image
+    DIFFUSERS_AVAILABLE = True
+except ImportError:
+    DIFFUSERS_AVAILABLE = False
+    print("Warning: diffusers, torch, or PIL not available. Image generation will be disabled.")
 
 router = APIRouter(
     prefix="/image",
