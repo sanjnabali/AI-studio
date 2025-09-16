@@ -39,10 +39,14 @@ export const useAuthStore = defineStore('auth', () => {
 
     try {
       const response = await apiClient.login(credentials)
-      
+
       user.value = response.user
       token.value = response.access_token
-      
+
+      // Store in localStorage for persistence
+      localStorage.setItem('auth_token', response.access_token)
+      localStorage.setItem('user_data', JSON.stringify(response.user))
+
       // Store refresh token if provided
       if (response.refresh_token) {
         localStorage.setItem('refresh_token', response.refresh_token)

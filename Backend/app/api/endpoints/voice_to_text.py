@@ -7,7 +7,7 @@ from typing import Optional
 import torch
 import asyncio
 import os
-from app.models.chat import VoiceRequest, VoiceResponse
+from ...models.chat import VoiceRequest, VoiceResponse
 
 logger = logging.getLogger(__name__)
 router = APIRouter()

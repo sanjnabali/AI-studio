@@ -600,15 +600,32 @@ watch(() => chatStore.loading, (loading) => {
 
 // Lifecycle
 onMounted(async () => {
-  if (!authStore.isAuthenticated) {
-    router.push('/auth')
-    return
-  }
-  
-  await chatStore.initialize()
-  
-  if (messageInput.value) {
-    messageInput.value.focus()
+  console.log('Studio component mounted')
+  console.log('Auth state:', {
+    isAuthenticated: authStore.isAuthenticated,
+    user: authStore.user,
+    userName: authStore.userName
+  })
+
+  try {
+    if (!authStore.isAuthenticated) {
+      console.log('User not authenticated, redirecting to auth')
+      router.push('/auth')
+      return
+    }
+
+    console.log('Initializing chat store...')
+    await chatStore.initialize()
+    console.log('Chat store initialized successfully')
+
+    if (messageInput.value) {
+      messageInput.value.focus()
+    }
+
+    console.log('Studio component initialization complete')
+  } catch (error) {
+    console.error('Error during Studio component initialization:', error)
+    // Don't redirect on error, just log it
   }
 })
 

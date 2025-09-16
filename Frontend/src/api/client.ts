@@ -146,6 +146,11 @@ class ApiClient {
   }
 
   private handleApiError(error: any): Error {
+    // Handle FastAPI style errors
+    if (error.response?.data?.detail) {
+      return new Error(error.response.data.detail)
+    }
+
     if (error.response?.data?.error_code) {
       const { error_code, message } = error.response.data
       switch (error_code) {

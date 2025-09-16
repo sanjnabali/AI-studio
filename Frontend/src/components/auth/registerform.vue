@@ -370,6 +370,8 @@ async function handleRegister() {
 
   if (success) {
     emit('register-success')
+  } else {
+    // Show error message handled by authStore.error reactive property
   }
 }
 </script>

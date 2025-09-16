@@ -158,8 +158,22 @@ router.beforeEach(async (to, from) => {
     // Check authentication requirements
     if (to.meta.requiresAuth) {
       console.log('🔒 Route requires authentication')
+      console.log('Current auth state:', {
+        isAuthenticated: authStore.isAuthenticated,
+        user: !!authStore.user,
+        token: !!authStore.token,
+        loading: authStore.isLoading,
+        localStorage: {
+          token: !!localStorage.getItem('auth_token'),
+          user: !!localStorage.getItem('user_data')
+        }
+      })
 
-      if (!authStore.isAuthenticated) {
+      // Check both store and localStorage
+      const hasToken = !!authStore.token || !!localStorage.getItem('auth_token')
+      const hasUser = !!authStore.user || !!localStorage.getItem('user_data')
+
+      if (!hasToken || !hasUser) {
         console.log('❌ User not authenticated')
 
         // Try to refresh token if we have one
@@ -189,7 +203,7 @@ router.beforeEach(async (to, from) => {
         }
       }
 
-      console.log('✅ User is authenticated')
+      console.log('✅ User is authenticated, allowing navigation')
     }
 
     // Guest-only routes

@@ -1,8 +1,8 @@
 from fastapi import APIRouter, HTTPException, UploadFile, File
 from typing import List, Optional
-from app.models.chat import ChatRequest, ChatResponse
-from app.services.llm import llm_service
-from app.services.rag_engine import RAGEngine, RAGConfig
+from ...models.chat import ChatRequest, ChatResponse
+from ...services.llm import llm_service
+from ...services.rag_engine import RAGEngine, RAGConfig
 import logging
 import json
 

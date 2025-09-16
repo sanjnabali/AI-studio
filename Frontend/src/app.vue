@@ -62,15 +62,26 @@ const route = useRoute()
 const globalError = ref<string | null>(null)
 
 onMounted(async () => {
+  console.log('App mounted, initializing auth...')
+
   // Initialize authentication
-  authStore.initializeAuth()
-  
-  // Auto-redirect logic
-  if (!authStore.isAuthenticated && route.path !== '/auth') {
-    router.push('/auth')
-  } else if (authStore.isAuthenticated && route.path === '/auth') {
-    router.push('/')
-  }
+  await authStore.initializeAuth()
+
+  console.log('Auth initialized, current state:', {
+    isAuthenticated: authStore.isAuthenticated,
+    path: route.path
+  })
+
+  // Auto-redirect logic with delay to ensure state is settled
+  setTimeout(() => {
+    if (!authStore.isAuthenticated && route.path !== '/auth') {
+      console.log('Redirecting unauthenticated user to auth')
+      router.push('/auth')
+    } else if (authStore.isAuthenticated && route.path === '/auth') {
+      console.log('Redirecting authenticated user to studio')
+      router.push('/')
+    }
+  }, 100)
 })
 
 // Global error handler

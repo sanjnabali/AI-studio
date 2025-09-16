@@ -46,9 +46,53 @@ function switchMode(mode: 'login' | 'register' | 'forgot') {
   authStore.clearError()
 }
 
-function handleAuthSuccess() {
-  const redirectPath = (route.query.redirect as string) || '/'
-  router.push(redirectPath)
+async function handleAuthSuccess() {
+  console.log('Auth success: navigating to studio page')
+  console.log('Current auth state:', {
+    isAuthenticated: authStore.isAuthenticated,
+    user: authStore.user,
+    token: !!authStore.token,
+    localStorage: {
+      token: !!localStorage.getItem('auth_token'),
+      user: !!localStorage.getItem('user_data')
+    }
+  })
+
+  // Wait for auth state to be fully updated
+  await new Promise(resolve => setTimeout(resolve, 200))
+
+  console.log('Auth state after delay:', {
+    isAuthenticated: authStore.isAuthenticated,
+    user: authStore.user,
+    token: !!authStore.token
+  })
+
+  // Additional check to ensure auth state is set before navigation
+  if (!authStore.isAuthenticated) {
+    console.warn('Auth state not set yet, delaying navigation')
+    await new Promise(resolve => setTimeout(resolve, 300))
+  }
+
+  // Emit event to notify login form to reset
+  window.dispatchEvent(new CustomEvent('login-success'))
+
+  // Force navigation with multiple fallbacks
+  try {
+    console.log('Attempting router.push...')
+    await router.push('/')
+    console.log('Router navigation successful')
+  } catch (error) {
+    console.error('Router navigation failed:', error)
+    try {
+      console.log('Attempting router.replace...')
+      await router.replace('/')
+      console.log('Router replace successful')
+    } catch (replaceError) {
+      console.error('Router replace failed:', replaceError)
+      console.log('Using window.location.href as final fallback')
+      window.location.href = '/'
+    }
+  }
 }
 
 // Lifecycle

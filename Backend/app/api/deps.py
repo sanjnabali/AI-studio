@@ -8,10 +8,10 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import time
 import logging
 
-from app.core.config import settings, get_settings, domain_config, security_config
-from app.core.security import get_current_user, check_rate_limit, rate_limiter, log_security_event
-from app.core.exceptions import RateLimitException, AuthenticationException
-from app.utils.helpers import perf_monitor
+from ..core.config import settings, get_settings, domain_config, security_config
+from ..core.security import get_current_user, check_rate_limit, rate_limiter, log_security_event
+from ..core.exceptions import RateLimitException, AuthenticationException
+from ..utils.helpers import perf_monitor
 
 logger = logging.getLogger(__name__)
 

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends
 from typing import Optional
-from app.models.chat import ChatRequest, ChatResponse, StreamingResponse
-from app.services.llm import llm_service
+from ...models.chat import ChatRequest, ChatResponse, StreamingResponse
+from ...services.llm import llm_service
 import logging
 import asyncio
 
