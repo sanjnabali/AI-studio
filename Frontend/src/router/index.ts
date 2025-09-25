@@ -2,6 +2,17 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '../store/auth'
 
+// Type declarations for Google Analytics gtag
+declare global {
+  interface Window {
+    gtag?: (
+      command: 'config' | 'set' | 'event' | 'get',
+      targetId: string,
+      config?: any
+    ) => void;
+  }
+}
+
 // Lazy load components with proper error handling
 const Studio = () => import('../views/Studio.vue').catch(err => {
   console.error('Failed to load Studio component:', err)
@@ -81,7 +92,7 @@ const routes: Array<RouteRecordRaw> = [
   {
     path: '/:pathMatch(.*)*',
     name: 'not-found',
-    redirect: '/' // Redirect unknown routes to studio
+    redirect: '/auth'
   }
 ]
 
@@ -99,12 +110,14 @@ const router = createRouter({
   }
 })
 
+let isInitialLoad = true;
+
 // Global navigation guards
 router.beforeEach(async (to, from) => {
   console.log(`🧭 Router: Navigating from ${from.path} to ${to.path}`)
 
-  // Prevent infinite loops
-  if (to.path === from.path) {
+  // Prevent infinite loops (skip for initial load where from.name is null)
+  if (to.path === from.path && from.name !== null) {
     console.warn('⚠️ Router: Navigation loop detected, aborting')
     return false
   }
@@ -117,9 +130,6 @@ router.beforeEach(async (to, from) => {
       console.log('⏳ Router: Waiting for auth initialization...')
       await authStore.initializeAuth()
     }
-
-    // Wait a short delay to ensure auth state is updated
-    await new Promise(resolve => setTimeout(resolve, 100))
 
     // If token exists but user is missing, fetch user info
     if (authStore.token && !authStore.user) {
@@ -166,6 +176,11 @@ router.beforeEach(async (to, from) => {
         return redirectPath
       }
       console.log('✅ Router: Guest access verified')
+    }
+
+    // Mark initial load as complete after first successful navigation
+    if (isInitialLoad) {
+      isInitialLoad = false
     }
 
     console.log('✅ Router: Navigation approved')

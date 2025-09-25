@@ -24,19 +24,35 @@
       <form class="mt-8 space-y-6" @submit.prevent="handleRegister">
         <div class="space-y-4">
           <div>
-            <label for="name" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Full name
+            <label for="username" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Username
             </label>
             <input
-              id="name"
-              v-model="form.name"
-              name="name"
+              id="username"
+              v-model="form.username"
+              name="username"
               type="text"
-              autocomplete="name"
+              autocomplete="username"
               required
               class="appearance-none relative block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white bg-white dark:bg-gray-800 rounded-lg focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
+              placeholder="Choose a username"
+              :disabled="authStore.loading"
+            />
+          </div>
+
+          <div>
+            <label for="fullName" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Full name (optional)
+            </label>
+            <input
+              id="fullName"
+              v-model="form.fullName"
+              name="fullName"
+              type="text"
+              autocomplete="name"
+              class="appearance-none relative block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white bg-white dark:bg-gray-800 rounded-lg focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
               placeholder="Enter your full name"
-              :disabled="authStore.isLoading"
+              :disabled="authStore.loading"
             />
           </div>
 
@@ -57,7 +73,7 @@
                 'border-green-300 dark:border-green-600': isValidEmail && form.email.length > 0
               }"
               placeholder="Enter your email"
-              :disabled="authStore.isLoading"
+              :disabled="authStore.loading"
             />
             <p v-if="emailError" class="mt-1 text-sm text-red-600 dark:text-red-400">
               {{ emailError }}
@@ -82,7 +98,7 @@
                   'border-green-300 dark:border-green-600': isStrongPassword && form.password.length > 0
                 }"
                 placeholder="Create a password"
-                :disabled="authStore.isLoading"
+                :disabled="authStore.loading"
               />
               <button
                 type="button"
@@ -181,7 +197,7 @@
                   'border-green-300 dark:border-green-600': passwordsMatch && form.confirmPassword.length > 0
                 }"
                 placeholder="Confirm your password"
-                :disabled="authStore.isLoading"
+                :disabled="authStore.loading"
               />
               <button
                 type="button"
@@ -238,10 +254,10 @@
             :disabled="!canSubmit"
             class="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
           >
-            <span v-if="authStore.isLoading" class="absolute left-0 inset-y-0 flex items-center pl-3">
+            <span v-if="authStore.loading" class="absolute left-0 inset-y-0 flex items-center pl-3">
               <div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
             </span>
-            {{ authStore.isLoading ? 'Creating account...' : 'Create account' }}
+            {{ authStore.loading ? 'Creating account...' : 'Create account' }}
           </button>
         </div>
       </form>
@@ -270,7 +286,8 @@ const emit = defineEmits<Emits>()
 const authStore = useAuthStore()
 
 const form = ref({
-  name: '',
+  username: '',
+  fullName: '',
   email: '',
   password: '',
   confirmPassword: '',
@@ -348,12 +365,12 @@ const confirmPasswordError = computed(() => {
 
 // Form validation
 const canSubmit = computed(() => {
-  return form.value.name.trim() &&
+  return form.value.username.trim() &&
          isValidEmail.value &&
          isStrongPassword.value &&
          passwordsMatch.value &&
          form.value.acceptTerms &&
-         !authStore.isLoading
+         !authStore.loading
 })
 
 async function handleRegister() {
@@ -361,17 +378,17 @@ async function handleRegister() {
 
   authStore.clearError()
 
-  const success = await authStore.register({
-    name: form.value.name.trim(),
+  await authStore.register({
+    username: form.value.username.trim(),
     email: form.value.email.trim(),
     password: form.value.password,
-    confirmPassword: form.value.confirmPassword
+    full_name: form.value.fullName.trim() || undefined
   })
 
-  if (success) {
+  // Check if registration was successful by checking if there's no error
+  if (!authStore.error) {
     emit('register-success')
-  } else {
-    // Show error message handled by authStore.error reactive property
   }
+  // If there's an error, it's already handled by authStore.error reactive property
 }
 </script>

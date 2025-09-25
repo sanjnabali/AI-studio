@@ -1,0 +1,97 @@
+{
+  "summary": {
+    "total_tests": 12,
+    "passed_tests": 11,
+    "failed_tests": 1,
+    "success_rate": 91.66666666666666,
+    "timestamp": "2025-09-21T14:43:00.644767"
+  },
+  "results": [
+    {
+      "test": "Health Check",
+      "success": true,
+      "timestamp": "2025-09-21T14:42:58.817465",
+      "details": "Status: healthy",
+      "response": null
+    },
+    {
+      "test": "API Health Check",
+      "success": true,
+      "timestamp": "2025-09-21T14:42:58.822739",
+      "details": "Status: healthy",
+      "response": null
+    },
+    {
+      "test": "User Registration",
+      "success": true,
+      "timestamp": "2025-09-21T14:42:59.212564",
+      "details": "User: testuser_750cc92a",
+      "response": null
+    },
+    {
+      "test": "User Login",
+      "success": true,
+      "timestamp": "2025-09-21T14:42:59.501260",
+      "details": "User: testuser_750cc92a",
+      "response": null
+    },
+    {
+      "test": "Get Current User",
+      "success": true,
+      "timestamp": "2025-09-21T14:42:59.508767",
+      "details": "User: testuser_750cc92a",
+      "response": null
+    },
+    {
+      "test": "Create Chat Session",
+      "success": true,
+      "timestamp": "2025-09-21T14:42:59.524147",
+      "details": "Session ID: 1",
+      "response": null
+    },
+    {
+      "test": "Chat Completion",
+      "success": true,
+      "timestamp": "2025-09-21T14:43:00.597697",
+      "details": "Response length: 20",
+      "response": null
+    },
+    {
+      "test": "Get Chat Sessions",
+      "success": true,
+      "timestamp": "2025-09-21T14:43:00.607884",
+      "details": "Sessions count: 1",
+      "response": null
+    },
+    {
+      "test": "Code Execution",
+      "success": true,
+      "timestamp": "2025-09-21T14:43:00.628399",
+      "details": "Status: error",
+      "response": null
+    },
+    {
+      "test": "Get Documents",
+      "success": true,
+      "timestamp": "2025-09-21T14:43:00.634863",
+      "details": "Documents count: 0",
+      "response": null
+    },
+    {
+      "test": "Voice Endpoint Available",
+      "success": true,
+      "timestamp": "2025-09-21T14:43:00.638863",
+      "details": "Status: 405",
+      "response": null
+    },
+    {
+      "test": "Image Generation",
+      "success": false,
+      "timestamp": "2025-09-21T14:43:00.641685",
+      "details": "Status: 404",
+      "response": {
+        "detail": "Not Found"
+      }
+    }
+  ]
+}

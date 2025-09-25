@@ -1,48 +1,46 @@
-<!-- src/app.vue - Fixed Main App Component -->
+<!-- Frontend/src/App.vue -->
 <template>
-  <div id="app" class="min-h-screen bg-gray-50 dark:bg-gray-900">
-    <!-- Global Loading Indicator -->
-    <div
-      v-if="authStore.isLoading && !authStore.isInitialized"
-      class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-    >
-      <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-xl">
-        <div class="flex items-center space-x-3">
-          <div class="w-6 h-6 border-3 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-          <span class="text-gray-700 dark:text-gray-300">Initializing...</span>
-        </div>
+  <div id="app" :data-theme="settingsStore.theme" class="min-h-screen">
+    <!-- Loading screen -->
+    <div v-if="isLoading" class="loading-screen">
+      <div class="flex flex-col items-center justify-center min-h-screen">
+        <div class="loading loading-spinner loading-lg text-primary"></div>
+        <p class="mt-4 text-lg">Loading AI Studio...</p>
       </div>
     </div>
 
-    <!-- Main App Content -->
-    <router-view v-slot="{ Component }">
-      <transition name="page" mode="out-in">
-        <component :is="Component || 'div'" />
-      </transition>
-    </router-view>
+    <!-- Main app -->
+    <div v-else class="app-container">
+      <!-- Navigation bar -->
+      <Navbar v-if="authStore.isAuthenticated" />
+      
+      <!-- Main content -->
+      <main class="main-content">
+        <RouterView />
+      </main>
 
-    <!-- Global Error Handler -->
-    <div
-      v-if="globalError"
-      class="fixed bottom-4 right-4 bg-red-50 border border-red-200 rounded-lg p-4 shadow-lg max-w-sm z-40"
-    >
-      <div class="flex items-start">
-        <div class="flex-shrink-0">
-          <svg class="h-5 w-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
-            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
-          </svg>
+      <!-- Toast notifications -->
+      <div class="toast toast-end z-50">
+        <div v-for="notification in notifications" :key="notification.id" 
+             :class="['alert', `alert-${notification.type}`]">
+          <span>{{ notification.message }}</span>
+          <button @click="removeNotification(notification.id)" class="btn btn-ghost btn-xs">
+            ×
+          </button>
         </div>
-        <div class="ml-3">
-          <h3 class="text-sm font-medium text-red-800">Error</h3>
-          <div class="mt-2 text-sm text-red-700">{{ globalError }}</div>
-          <div class="mt-3">
-            <button
-              @click="clearError"
-              class="text-sm bg-red-100 text-red-800 hover:bg-red-200 px-2 py-1 rounded"
-            >
-              Dismiss
-            </button>
+      </div>
+
+      <!-- Error boundary -->
+      <div v-if="hasError" class="error-boundary">
+        <div class="alert alert-error">
+          <svg class="stroke-current shrink-0 w-6 h-6" fill="none" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <div>
+            <h3 class="font-bold">Application Error</h3>
+            <div class="text-xs">{{ errorMessage }}</div>
           </div>
+          <button @click="resetError" class="btn btn-sm">Reload</button>
         </div>
       </div>
     </div>
@@ -50,225 +48,211 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onErrorCaptured, ref, watch, nextTick } from 'vue'
+import { ref, onMounted, onErrorCaptured } from 'vue'
+import { RouterView, useRouter } from 'vue-router'
 import { useAuthStore } from './store/auth'
-import { useRouter, useRoute } from 'vue-router'
+import { useSettingsStore } from './store/settings'
+import Navbar from './components/Navbar.vue'
+
+const router = useRouter()
+
+interface Notification {
+  id: string
+  type: 'success' | 'error' | 'warning' | 'info'
+  message: string
+  timeout?: number
+}
 
 const authStore = useAuthStore()
-const router = useRouter()
-const route = useRoute()
+const settingsStore = useSettingsStore()
 
-const globalError = ref<string | null>(null)
+const isLoading = ref(true)
+const hasError = ref(false)
+const errorMessage = ref('')
+const notifications = ref<Notification[]>([])
 
 onMounted(async () => {
-  console.log('🚀 App mounted, initializing...')
+  try {
+    // Wait for router to be ready
+    await router.isReady()
+    console.log('✅ App: Router is ready')
 
-  // Initialize authentication first
-  await authStore.initializeAuth()
+    // Initialize auth
+    await authStore.initializeAuth()
+    console.log('✅ App: Auth initialized')
 
-  console.log('✅ Auth initialized, current state:', {
-    isAuthenticated: authStore.isAuthenticated,
-    hasUser: !!authStore.user,
-    hasToken: !!authStore.token,
-    path: route.path
-  })
+    // Check API health
+    const healthResponse = await fetch('/api/health')
+    if (!healthResponse.ok) {
+      throw new Error(`API health check failed: ${healthResponse.status}`)
+    }
+    console.log('✅ App: API health check passed')
+
+    // Load user settings if authenticated
+    if (authStore.isAuthenticated) {
+      settingsStore.loadSettings()
+      console.log('✅ App: Settings loaded')
+    }
+
+    // If not authenticated, ensure we're on auth page
+    if (!authStore.isAuthenticated && router.currentRoute.value.path !== '/auth') {
+      console.log('🔀 App: Not authenticated, navigating to /auth')
+      await router.replace('/auth')
+    }
+    
+  } catch (error: any) {
+    console.error('App initialization error:', error)
+    if (error.response?.status === 401 || !authStore.isAuthenticated) {
+      // Unauthorized - ensure auth page
+      authStore.logout()
+      if (router.currentRoute.value.path !== '/auth') {
+        await router.replace('/auth')
+      }
+    } else {
+      showNotification('error', 'Failed to initialize application')
+      hasError.value = true
+      errorMessage.value = error.message || 'Initialization failed'
+    }
+  } finally {
+    isLoading.value = false
+  }
 })
 
-// Auth navigation is handled by the auth.vue component and router guards
-
-// Watch for initialization completion
-watch(
-  () => authStore.isInitialized,
-  (isInitialized) => {
-    if (isInitialized) {
-      console.log('🎯 Auth initialization complete, handling navigation...')
-      
-      // Small delay to ensure router is ready
-      setTimeout(() => {
-        if (!authStore.isAuthenticated && route.path !== '/auth') {
-          console.log('🔀 Redirecting unauthenticated user to auth')
-          router.push('/auth')
-        } else if (authStore.isAuthenticated && route.path === '/auth') {
-          console.log('🔀 Redirecting authenticated user to studio')
-          router.push('/')
-        }
-      }, 100)
-    }
-  }
-)
-
-// Global error handler
 onErrorCaptured((error: Error) => {
-  console.error('💥 Global error caught:', error)
-  globalError.value = error.message || 'An unexpected error occurred'
+  console.error('Vue error captured:', error)
+  hasError.value = true
+  errorMessage.value = error.message
   return false
 })
 
-function clearError() {
-  globalError.value = null
+const showNotification = (type: Notification['type'], message: string, timeout = 5000) => {
+  const notification: Notification = {
+    id: Math.random().toString(36).substr(2, 9),
+    type,
+    message,
+    timeout
+  }
+  
+  notifications.value.push(notification)
+  
+  if (timeout > 0) {
+    setTimeout(() => {
+      removeNotification(notification.id)
+    }, timeout)
+  }
 }
 
-// Listen for auth state changes from the store
-watch(
-  () => authStore.isAuthenticated,
-  (newValue, oldValue) => {
-    console.log('🔄 Auth store subscription triggered:', {
-      isAuthenticated: newValue,
-      wasAuthenticated: oldValue,
-      path: route.path
-    })
-  },
-  { immediate: false }
-)
+const removeNotification = (id: string) => {
+  const index = notifications.value.findIndex(n => n.id === id)
+  if (index > -1) {
+    notifications.value.splice(index, 1)
+  }
+}
+
+const resetError = () => {
+  hasError.value = false
+  errorMessage.value = ''
+  window.location.reload()
+}
+
+// Global error handler
+window.addEventListener('unhandledrejection', (event) => {
+  console.error('Unhandled promise rejection:', event.reason)
+  showNotification('error', 'An unexpected error occurred')
+})
+
+// Export for global use
+window.showNotification = showNotification
 </script>
 
 <style>
-/* Global Styles */
-* {
-  box-sizing: border-box;
-}
-
-body {
+/* Global styles */
+html, body, #app {
+  height: 100%;
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  padding: 0;
 }
 
-/* Page transitions */
-.page-enter-active,
-.page-leave-active {
-  transition: all 0.3s ease;
+.app-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
 }
 
-.page-enter-from,
-.page-leave-to {
-  opacity: 0;
-  transform: translateY(10px);
+.main-content {
+  flex: 1;
+  overflow: hidden;
 }
 
-/* scrollbar.css */
+.loading-screen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--fallback-b1, oklch(var(--b1)/var(--tw-bg-opacity)));
+  z-index: 9999;
+}
+
+.error-boundary {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 9999;
+  max-width: 90vw;
+}
+
+/* Dark mode styles */
+[data-theme="dark"] {
+  --tw-bg-opacity: 1;
+  background-color: rgb(30 41 59 / var(--tw-bg-opacity));
+  color: rgb(248 250 252);
+}
+
+/* Custom scrollbars */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  @apply bg-gray-100 dark:bg-gray-800;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-gray-400 dark:bg-gray-600 rounded-full transition-colors duration-200;
+  background: rgb(156 163 175);
+  border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  @apply bg-gray-500 dark:bg-gray-500;
+  background: rgb(107 114 128);
 }
 
-/* ==================== */
-/* Firefox Support      */
-/* ==================== */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: theme('colors.gray.400') theme('colors.gray.100');
+/* Code highlighting */
+.hljs {
+  background: #1e293b !important;
+  border-radius: 8px;
 }
 
-html.dark * {
-  scrollbar-color: theme('colors.gray.600') theme('colors.gray.800');
+/* Animation utilities */
+.fade-enter-active, .fade-leave-active {
+  transition: opacity 0.3s ease;
 }
 
-/* ==================== */
-/* Dark mode support    */
-/* ==================== */
-@media (prefers-color-scheme: dark) {
-  html {
-    color-scheme: dark;
-  }
+.fade-enter-from, .fade-leave-to {
+  opacity: 0;
 }
 
-/* Loading animations */
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
+.slide-enter-active, .slide-leave-active {
+  transition: transform 0.3s ease;
 }
 
-.animate-spin {
-  animation: spin 1s linear infinite;
+.slide-enter-from {
+  transform: translateX(-100%);
 }
 
-@keyframes pulse {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.5;
-  }
-}
-
-.animate-pulse {
-  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
-
-@keyframes bounce {
-  0%, 100% {
-    transform: translateY(-25%);
-    animation-timing-function: cubic-bezier(0.8, 0, 1, 1);
-  }
-  50% {
-    transform: none;
-    animation-timing-function: cubic-bezier(0, 0, 0.2, 1);
-  }
-}
-
-.animate-bounce {
-  animation: bounce 1s infinite;
-}
-
-/* Custom utility classes */
-.bg-gradient-to-r {
-  background-image: linear-gradient(to right, var(--tw-gradient-stops));
-}
-
-.from-blue-500 {
-  --tw-gradient-from: #3b82f6;
-  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to, rgba(59, 130, 246, 0));
-}
-
-.to-purple-600 {
-  --tw-gradient-to: #9333ea;
-}
-
-/* Responsive design helpers */
-.container {
-  width: 100%;
-  margin-left: auto;
-  margin-right: auto;
-  padding-left: 1rem;
-  padding-right: 1rem;
-}
-
-@media (min-width: 640px) {
-  .container {
-    max-width: 640px;
-  }
-}
-
-@media (min-width: 768px) {
-  .container {
-    max-width: 768px;
-  }
-}
-
-@media (min-width: 1024px) {
-  .container {
-    max-width: 1024px;
-  }
-}
-
-@media (min-width: 1280px) {
-  .container {
-    max-width: 1280px;
-  }
+.slide-leave-to {
+  transform: translateX(100%);
 }
 </style>

@@ -1,350 +1,223 @@
-# 🚀 AI Studio - Production-Ready Multimodal AI Platform
+# AI Studio - Production-Ready AI Development Platform
 
-A comprehensive, production-ready AI studio built with FastAPI, Vue.js, and state-of-the-art small language models. Features multimodal capabilities, RAG (Retrieval-Augmented Generation), fine-tuning, agent orchestration, and real-time processing.
+A comprehensive AI development platform similar to Google AI Studio, built with FastAPI (Python) and Vue 3 (TypeScript).
 
-## ✨ Features
+## 🚀 Features
 
-### 🤖 **Multi-Agent Architecture**
-- **Code Agent**: Specialized code generation, review, and explanation
-- **Text Agent**: Creative writing, summarization, and analysis  
-- **RAG Agent**: Document-based question answering with context retrieval
-- **Agent Orchestrator**: Intelligent task distribution and load balancing
+### Core AI Capabilities
+- **Multi-Modal Chat**: Text, voice, and image conversations with AI
+- **RAG (Retrieval-Augmented Generation)**: Upload and query documents (PDF, DOCX, TXT)
+- **Code Generation & Execution**: Generate, run, and analyze code in multiple languages
+- **Voice Processing**: Speech-to-text and text-to-speech using real AI models
+- **Image Analysis**: AI-powered image understanding and description
 
-### 🧠 **Advanced AI Capabilities**
-- **Small, Efficient Models**: Phi-2, T5-Small, MiniLM for optimal performance
-- **Fine-tuning Support**: LoRA-based fine-tuning for domain specialization
-- **Quantization**: 4-bit quantization for memory efficiency
-- **Domain Specialization**: Code, creative, analysis, summarization domains
+### Advanced Features
+- **Real-time Code Canvas**: Interactive coding environment with live execution
+- **Document Intelligence**: Smart document processing and question-answering
+- **Voice Conversations**: Natural speech interactions with AI
+- **Model Configuration**: Fine-tune AI parameters (temperature, top-p, etc.)
+- **Session Management**: Persistent chat sessions and conversation history
+- **Secure Authentication**: JWT-based auth with password hashing
 
-### 🔍 **RAG (Retrieval-Augmented Generation)**
-- **Document Ingestion**: PDF, DOCX, TXT, JSON support
-- **Vector Search**: FAISS-based semantic search
-- **Context Enhancement**: Automatic context retrieval for queries
-- **Citation Tracking**: Source attribution for generated responses
+### Technical Excellence
+- **Production-Ready Security**: Password validation, API key management, secure file uploads
+- **Scalable Architecture**: Modular design with proper error handling
+- **Real AI Models**: Uses Transformers, Whisper, SpeechT5, and other pre-trained models
+- **Database Integration**: SQLAlchemy with session management
+- **Vector Database**: ChromaDB for efficient document similarity search
+- **Modern Frontend**: Vue 3 + TypeScript + Tailwind CSS + DaisyUI
 
-### 🎙️ **Multimodal Processing**
-- **Voice-to-Text**: Whisper-based speech recognition
-- **Image Analysis**: CLIP-based image understanding
-- **Audio Processing**: Real-time transcription
-- **File Upload**: Multi-format document processing
+## 🛠 Technology Stack
 
-### 🛠️ **Development Tools**
-- **Code Canvas**: Interactive code editor with live preview
-- **Template System**: Pre-built prompts for common tasks
-- **Streaming Responses**: Real-time response generation
-- **Model Switching**: Dynamic model selection
+### Backend
+- **FastAPI** - High-performance web framework
+- **SQLAlchemy** - Database ORM
+- **ChromaDB** - Vector database for RAG
+- **Transformers** - Hugging Face models
+- **Whisper** - Speech recognition
+- **SpeechT5** - Text-to-speech
+- **JWT** - Authentication
+- **Docker** - Containerization
 
-### 📊 **Production Features**
-- **Monitoring**: Prometheus metrics and Grafana dashboards
-- **Logging**: Structured logging with correlation IDs
-- **Health Checks**: Comprehensive service health monitoring
-- **Auto-scaling**: Container orchestration ready
-- **Backup/Restore**: Automated data backup systems
+### Frontend
+- **Vue 3** - Progressive web framework
+- **TypeScript** - Type-safe JavaScript
+- **Pinia** - State management
+- **Tailwind CSS** - Utility-first styling
+- **DaisyUI** - Component library
+- **Axios** - HTTP client
 
-## 🏗️ Architecture
+### AI Models (Pre-trained, No APIs)
+- **DialoGPT**: Conversational AI
+- **CodeBERT**: Code understanding
+- **Whisper**: Speech-to-text
+- **SpeechT5**: Text-to-speech
+- **BART**: Text summarization
+- **Sentence-Transformers**: Embeddings
 
-```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Frontend      │    │   Backend API   │    │   AI Services   │
-│   (Vue.js)      │◄──►│   (FastAPI)     │◄──►│   (PyTorch)     │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-         │                       │                       │
-         │                       │                       │
-         ▼                       ▼                       ▼
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Nginx         │    │   PostgreSQL    │    │   Redis Cache   │
-│   (Proxy)       │    │   (Metadata)    │    │   (Sessions)    │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-         │                       │                       │
-         │                       │                       │
-         ▼                       ▼                       ▼
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Monitoring    │    │   Task Queue    │    │   File Storage  │
-│   (Grafana)     │    │   (Celery)      │    │   (Volumes)     │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-```
-
-## 🚀 Quick Start
+## 📦 Installation
 
 ### Prerequisites
-- Docker & Docker Compose
-- Git
-- 4GB+ RAM recommended
-- NVIDIA GPU (optional, for acceleration)
+- Python 3.8+ 
+- Node.js 16+
+- Docker (optional)
 
-### 1. Clone the Repository
+### Quick Start
+
+1. **Clone the repository**
 ```bash
-git clone https://github.com/yourusername/ai-studio.git
+git clone https://github.com/sanjnabali/ai-studio.git
 cd ai-studio
 ```
 
-### 2. Development Setup
+2. **Start development environment**
 ```bash
-# Make scripts executable
-chmod +x scripts/*.sh
-
-# Start development environment
+chmod +x scripts/start_dev.sh
 ./scripts/start_dev.sh
 ```
 
-### 3. Production Deployment
+This will automatically:
+- Set up Python virtual environment
+- Install all dependencies
+- Start backend on http://localhost:8000
+- Start frontend on http://localhost:5173
+
+3. **Access the application**
+- Frontend: http://localhost:5173
+- Backend API: http://localhost:8000
+- API Documentation: http://localhost:8000/docs
+
+### Manual Setup
+
+#### Backend Setup
 ```bash
-# Deploy with Docker Compose
-./scripts/deploy_production.sh
+cd Backend
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
+cp .env.example .env  # Edit with your configuration
+uvicorn app.main:app --reload
 ```
 
-### 4. Access the Application
-- **Frontend**: http://localhost:3000
-- **API Docs**: http://localhost:8000/docs
-- **Monitoring**: http://localhost:3001 (Grafana)
-- **Task Monitor**: http://localhost:5555 (Flower)
-
-## 📖 Usage Guide
-
-### Basic Chat
-```python
-# Send a message
-POST /api/chat-text/
-{
-    "messages": [{"role": "user", "content": "Write a Python function"}],
-    "domain": "code",
-    "temperature": 0.7
-}
+#### Frontend Setup
+```bash
+cd Frontend
+npm install
+npm run dev
 ```
 
-### RAG-Enhanced Chat
-```python
-# Upload documents first
-POST /api/chat-rag/upload-documents
-# Form data with files
-
-# Query with context
-POST /api/chat-rag/
-{
-    "messages": [{"role": "user", "content": "What does the document say about AI?"}],
-    "use_rag": true
-}
-```
-
-### Voice Processing
-```python
-# Transcribe audio
-POST /api/voice/transcribe
-# Form data with audio file
-```
-
-### Fine-tuning
-```python
-# Start fine-tuning job
-POST /api/fine-tuning/
-{
-    "adapter_name": "my_specialist",
-    "training_data": [...],
-    "lora_config": {"r": 16, "lora_alpha": 32}
-}
+### Docker Setup
+```bash
+docker-compose up -d
 ```
 
 ## 🔧 Configuration
 
-### Environment Variables
-
-#### Backend (.env)
-```bash
-# Server
-HOST=0.0.0.0
-PORT=8000
-WORKERS=1
-ENVIRONMENT=production
-
-# Database
-DATABASE_URL=postgresql://user:pass@localhost/ai_studio
-
-# Redis
-REDIS_URL=redis://localhost:6379/0
-
-# AI Models
-MODEL_CACHE_DIR=./models
-RAG_STORAGE_DIR=./rag_storage
-
-# Security
-SECRET_KEY=your-secret-key
-ALLOWED_ORIGINS=http://localhost:3000
-
-# Monitoring
-ENABLE_METRICS=true
-LOG_LEVEL=INFO
-```
-
-#### Frontend (.env)
-```bash
-VITE_API_BASE_URL=http://localhost:8000
-VITE_APP_NAME=AI Studio
-VITE_APP_VERSION=1.0.0
+### Environment Variables (.env)
+```env
+SECRET_KEY=your-super-secret-key
+DATABASE_URL=sqlite:///./ai_studio.db
+DEBUG=False
+HF_TOKEN=your-huggingface-token  # Optional
+MAX_FILE_SIZE=10485760  # 10MB
 ```
 
 ### Model Configuration
+The system automatically downloads and caches AI models on first use:
+- Models are stored in `~/.cache/huggingface/`
+- First startup may take 5-10 minutes to download models
+- Subsequent starts are much faster
 
-The system uses optimized small models:
+## 📚 Usage
 
-- **Text Generation**: Microsoft Phi-2 (2.7B parameters)
-- **Code Generation**: CodeT5p-220M
-- **Embeddings**: all-MiniLM-L6-v2
-- **Speech**: Whisper-tiny
-- **Vision**: CLIP-ViT-B-16
+### 1. Authentication
+- Register a new account or login
+- Secure JWT-based authentication
+- API key generation for programmatic access
 
-## 📊 Monitoring
+### 2. Chat Interface
+- Start conversations with AI
+- Upload documents for RAG-based Q&A
+- Voice input/output support
+- Configurable model parameters
 
-### Health Checks
-```bash
-# Check system health
-curl http://localhost:8000/health
+### 3. Code Canvas
+- Generate code from natural language
+- Execute code in multiple languages
+- Real-time analysis and suggestions
+- Interactive debugging
 
-# Check model status
-curl http://localhost:8000/models/status
+### 4. Document Processing
+- Upload PDF, DOCX, TXT files
+- Automatic chunking and embedding
+- Smart search and retrieval
+- Citation tracking
 
-# Check metrics
-curl http://localhost:8000/metrics
+### 5. Voice Features
+- Record voice messages
+- AI speech recognition
+- Text-to-speech output
+- Natural conversations
+
+## 🏗 Architecture
+
 ```
-
-### Grafana Dashboards
-
-Pre-configured dashboards for:
-- API Response Times
-- Model Inference Metrics
-- System Resource Usage
-- Error Rates and Success Rates
-- Agent Performance
-
-## 🛠️ Development
-
-### Project Structure
-```
-ai-studio/
-├── backend/
+AI-STUDIO/
+├── Backend/           # FastAPI application
 │   ├── app/
-│   │   ├── api/          # API endpoints
-│   │   ├── services/     # Business logic
-│   │   ├── models/       # Data models
-│   │   └── core/         # Configuration
+│   │   ├── api/       # API endpoints
+│   │   ├── core/      # Security, config
+│   │   ├── models/    # Database models
+│   │   └── services/  # Business logic
 │   ├── requirements.txt
 │   └── Dockerfile
-├── frontend/
+├── Frontend/          # Vue.js application
 │   ├── src/
-│   │   ├── components/   # Vue components
-│   │   ├── views/        # Pages
-│   │   ├── store/        # State management
-│   │   └── api/          # API client
+│   │   ├── components/  # Vue components
+│   │   ├── store/      # Pinia stores
+│   │   ├── api/        # API client
+│   │   └── views/      # Page components
 │   ├── package.json
 │   └── Dockerfile
-├── scripts/              # Deployment scripts
-├── docker-compose.yml
-└── README.md
+├── scripts/           # Deployment scripts
+└── docker-compose.yml
 ```
 
-### Adding New Models
-1. Update `ModelManager` in `services/model_manager.py`
-2. Add model configuration
-3. Implement loading and inference logic
-4. Update API endpoints
+## 🔒 Security Features
 
-### Adding New Agents
-1. Extend `BaseAgent` class
-2. Implement required methods
-3. Register with `AgentOrchestrator`
-4. Add API endpoints
+- **Password Hashing**: Bcrypt encryption
+- **JWT Authentication**: Secure token-based auth
+- **CORS Protection**: Configurable origins
+- **File Upload Security**: Type and size validation
+- **SQL Injection Prevention**: SQLAlchemy ORM
+- **XSS Protection**: Input sanitization
+- **Rate Limiting**: Request throttling
+- **Secure Headers**: Security middleware
 
-### Custom Fine-tuning
-```python
-from app.services.llm import llm_service
+## 🚀 Deployment
 
-# Prepare training data
-training_data = [
-    {
-        "messages": [
-            {"role": "user", "content": "input"},
-            {"role": "assistant", "content": "output"}
-        ],
-        "domain": "custom"
-    }
-]
-
-# Start fine-tuning
-result = await llm_service.fine_tune_lora(
-    training_data=training_data,
-    adapter_name="custom_adapter",
-    lora_config={
-        "r": 16,
-        "lora_alpha": 32,
-        "lora_dropout": 0.1
-    }
-)
-```
-
-## 🔐 Security
-
-### Authentication
-- JWT-based authentication (optional)
-- API key authentication
-- Rate limiting per IP/user
-
-### Data Protection
-- Input sanitization
-- SQL injection prevention
-- XSS protection
-- CORS configuration
-
-### Model Security
-- Model weight validation
-- Inference timeout limits
-- Memory usage monitoring
-- Sandboxed execution
-
-## 📈 Performance
-
-### Optimization Features
-- **Model Quantization**: 4-bit quantization reduces memory by 75%
-- **Caching**: Redis-based response caching
-- **Batching**: Request batching for efficiency
-- **Load Balancing**: Multi-worker deployment
-- **Memory Management**: Automatic cleanup and optimization
-
-### Benchmarks
-- **Response Time**: <2s for most queries
-- **Memory Usage**: <4GB with quantization
-- **Throughput**: 10+ concurrent requests
-- **Model Loading**: <30s cold start
-
-## 🐛 Troubleshooting
-
-### Common Issues
-
-#### Backend not starting
+### Development
 ```bash
-# Check logs
-./scripts/logs.sh api
-
-# Verify models are downloading
-docker-compose exec api ls -la /app/models
+./scripts/start_dev.sh
 ```
 
-#### Out of memory
+### Production
 ```bash
-# Enable quantization
-export ENABLE_QUANTIZATION=true
-
-# Reduce batch size
-export MAX_BATCH_SIZE=1
+./scripts/deploy_production.sh
 ```
 
-#### RAG not working
+### Docker Production
 ```bash
-# Check document upload
-curl -X POST -F "files=@document.pdf" http://localhost:8000/api/chat-rag/upload-documents
-
-# Verify vector index
-./scripts/shell.sh api
-python -c "from app.services.rag_engine import rag_engine; print(rag_engine.get_stats())"
+docker-compose -f docker-compose.prod.yml up -d
 ```
+
+## 📊 Performance
+
+- **Model Loading**: Optimized caching and lazy loading
+- **Memory Management**: Efficient model sharing
+- **Database**: Connection pooling and query optimization
+- **Frontend**: Code splitting and lazy loading
+- **File Processing**: Streaming uploads and chunked processing
 
 ## 🤝 Contributing
 
@@ -354,44 +227,45 @@ python -c "from app.services.rag_engine import rag_engine; print(rag_engine.get_
 4. Add tests
 5. Submit a pull request
 
-### Development Setup
-```bash
-# Backend
-cd backend
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-pip install -r requirements-dev.txt
-
-# Frontend
-cd frontend
-npm install
-npm run dev
-```
-
-### Testing
-```bash
-# Backend tests
-cd backend
-pytest
-
-# Frontend tests
-cd frontend
-npm run test
-```
-
 ## 📝 License
 
-This project is licensed under the MIT License 
+This project is licensed under the MIT License - see the LICENSE file for details.
 
-## 🙏 Acknowledgments
+## 🆘 Troubleshooting
 
-- **Hugging Face** for transformer models and libraries
-- **FastAPI** for the excellent web framework
-- **Vue.js** for the reactive frontend framework
-- **Microsoft** for the Phi-2 model
-- **OpenAI** for Whisper and CLIP models
+### Common Issues
 
+1. **Models not downloading**
+   - Check internet connection
+   - Verify HuggingFace token (if using private models)
+   - Check disk space (models can be 1-2GB each)
+
+2. **Voice features not working**
+   - Enable microphone permissions
+   - Check browser compatibility
+   - Install audio system dependencies
+
+3. **Code execution failing**
+   - Ensure Python/Node.js are installed
+   - Check security settings
+   - Verify Docker access (if using containers)
+
+### Performance Tips
+- Use GPU acceleration if available
+- Increase memory allocation for large documents
+- Enable model quantization for faster inference
+- Use SSD storage for better model loading
+
+## 🔮 Roadmap
+
+- [ ] Multi-language support
+- [ ] Advanced RAG features
+- [ ] More AI model options
+- [ ] Collaborative features
+- [ ] Mobile app
+- [ ] Cloud deployment templates
+- [ ] Advanced analytics
+- [ ] Plugin system
 
 ---
 

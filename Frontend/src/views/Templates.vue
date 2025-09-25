@@ -56,7 +56,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import Navbar from '../composables/Navbar.vue'
+import Navbar from '../components/Navbar.vue'
 import {
   CodeBracketIcon,
   PencilIcon,

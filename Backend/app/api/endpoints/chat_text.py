@@ -1,83 +1,303 @@
-from fastapi import APIRouter, HTTPException, Depends
-from typing import Optional
-from ...models.chat import ChatRequest, ChatResponse, StreamingResponse
-from ...services.llm import llm_service
+# Backend/app/api/endpoints/chat_text.py
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+from pydantic import BaseModel, Field
+from typing import List, Optional, Dict, Any
 import logging
-import asyncio
+import time
+
+from app.models.user import User, ChatSession, ChatMessage as DBChatMessage
+from app.models.chat import ChatRequest, ChatResponse, MessageRole, MessageType
+from app.services.llm import llm_service
+from app.api.deps import get_current_user
+from app.core.database import get_db
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-@router.post("/", response_model=ChatResponse)
-async def chat_text(request: ChatRequest):
-    """Text-based chat endpoint with domain specialization"""
+class ChatSessionCreate(BaseModel):
+    name: Optional[str] = "New Chat"
+    model_config: Optional[Dict[str, Any]] = {}
+
+class ChatSessionResponse(BaseModel):
+    id: int
+    name: str
+    created_at: str
+    updated_at: str
+    message_count: int
+    model_config: Dict[str, Any]
+
+class MessageResponse(BaseModel):
+    id: int
+    role: str
+    content: str
+    message_type: str
+    metadata: Dict[str, Any]
+    created_at: str
+    token_count: int
+
+@router.post("/sessions", response_model=ChatSessionResponse)
+async def create_chat_session(
+    session_data: ChatSessionCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Create a new chat session"""
     try:
-        # Initialize service if not already done
-        if not llm_service.model:
-            await llm_service.initialize()
+        new_session = ChatSession(
+            user_id=current_user.id,
+            session_name=session_data.name,
+            model_config=session_data.model_config or current_user.model_preferences
+        )
+        
+        db.add(new_session)
+        db.commit()
+        db.refresh(new_session)
+        
+        return ChatSessionResponse(
+            id=new_session.id,
+            name=new_session.session_name,
+            created_at=new_session.created_at.isoformat(),
+            updated_at=new_session.updated_at.isoformat(),
+            message_count=0,
+            model_config=new_session.model_config
+        )
+        
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error creating chat session: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error creating chat session"
+        )
+
+@router.get("/sessions", response_model=List[ChatSessionResponse])
+async def get_chat_sessions(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get all chat sessions for the current user"""
+    try:
+        sessions = db.query(ChatSession).filter(
+            ChatSession.user_id == current_user.id,
+            ChatSession.is_archived == False
+        ).order_by(ChatSession.updated_at.desc()).all()
+        
+        session_responses = []
+        for session in sessions:
+            message_count = db.query(DBChatMessage).filter(
+                DBChatMessage.session_id == session.id
+            ).count()
+            
+            session_responses.append(ChatSessionResponse(
+                id=session.id,
+                name=session.session_name,
+                created_at=session.created_at.isoformat(),
+                updated_at=session.updated_at.isoformat(),
+                message_count=message_count,
+                model_config=session.model_config
+            ))
+        
+        return session_responses
+        
+    except Exception as e:
+        logger.error(f"Error getting chat sessions: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error retrieving chat sessions"
+        )
+
+@router.get("/sessions/{session_id}/messages", response_model=List[MessageResponse])
+async def get_session_messages(
+    session_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get all messages for a chat session"""
+    try:
+        # Verify session ownership
+        session = db.query(ChatSession).filter(
+            ChatSession.id == session_id,
+            ChatSession.user_id == current_user.id
+        ).first()
+        
+        if not session:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Chat session not found"
+            )
+        
+        messages = db.query(DBChatMessage).filter(
+            DBChatMessage.session_id == session_id
+        ).order_by(DBChatMessage.created_at.asc()).all()
+        
+        return [
+            MessageResponse(
+                id=msg.id,
+                role=msg.role,
+                content=msg.content,
+                message_type=msg.message_type,
+                metadata=msg.metadata,
+                created_at=msg.created_at.isoformat(),
+                token_count=msg.token_count
+            )
+            for msg in messages
+        ]
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting session messages: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error retrieving messages"
+        )
+
+@router.post("/chat", response_model=ChatResponse)
+async def chat_completion(
+    request: ChatRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Process a chat completion request"""
+    try:
+        start_time = time.time()
+        
+        # Get or create session
+        session = None
+        if request.session_id:
+            session = db.query(ChatSession).filter(
+                ChatSession.id == request.session_id,
+                ChatSession.user_id == current_user.id
+            ).first()
+        
+        if not session:
+            # Create new session
+            session = ChatSession(
+                user_id=current_user.id,
+                session_name="New Chat",
+                model_config=request.model_config or current_user.model_preferences
+            )
+            db.add(session)
+            db.commit()
+            db.refresh(session)
+        
+        # Save user message
+        user_message = DBChatMessage(
+            session_id=session.id,
+            user_id=current_user.id,
+            role=MessageRole.USER.value,
+            content=request.message,
+            message_type=MessageType.TEXT.value,
+            metadata={},
+            token_count=len(request.message.split())
+        )
+        db.add(user_message)
+        
+        # Get conversation history
+        recent_messages = db.query(DBChatMessage).filter(
+            DBChatMessage.session_id == session.id
+        ).order_by(DBChatMessage.created_at.desc()).limit(10).all()
+        
+        # Build conversation context
+        conversation_history = []
+        for msg in reversed(recent_messages):
+            conversation_history.append({
+                "role": msg.role,
+                "content": msg.content
+            })
+        conversation_history.append({
+            "role": MessageRole.USER.value,
+            "content": request.message
+        })
+        
+        # Merge model config with user preferences
+        model_config = {**current_user.model_preferences, **(request.model_config or {})}
         
         # Generate response
-        output, latency = await llm_service.chat(
-            messages=[msg.dict() for msg in request.messages],
-            temperature=request.temperature or 0.7,
-            top_k=request.top_k or 50,
-            top_p=request.top_p or 0.9,
-            domain=request.domain or "general",
-            max_tokens=200,
-            adapter_name=request.use_rag  # Use as adapter name if provided
+        llm_response = await llm_service.chat_completion(
+            conversation_history,
+            model_config
         )
         
-        # Count tokens (approximate)
-        input_text = " ".join([msg.content for msg in request.messages])
-        tokens_input = len(llm_service.tokenizer.encode(input_text)) if llm_service.tokenizer else 0
-        tokens_output = len(llm_service.tokenizer.encode(output)) if llm_service.tokenizer else 0
+        # Save assistant message
+        assistant_message = DBChatMessage(
+            session_id=session.id,
+            user_id=current_user.id,
+            role=MessageRole.ASSISTANT.value,
+            content=llm_response["response"],
+            message_type=MessageType.TEXT.value,
+            metadata={
+                "model_used": llm_response["model_used"],
+                "processing_time": llm_response["processing_time"]
+            },
+            token_count=llm_response["token_count"]
+        )
+        db.add(assistant_message)
+        
+        # Update usage stats
+        current_user.usage_stats["total_requests"] += 1
+        current_user.usage_stats["total_tokens"] += llm_response["token_count"]
+        current_user.usage_stats["last_request"] = time.time()
+        
+        db.commit()
+        db.refresh(assistant_message)
+        
+        processing_time = time.time() - start_time
         
         return ChatResponse(
-            output=output,
-            tokens_input=tokens_input,
-            tokens_output=tokens_output,
-            latency_ms=latency,
-            citations=None
+            message=llm_response["response"],
+            session_id=session.id,
+            message_id=assistant_message.id,
+            model_used=llm_response["model_used"],
+            token_count=llm_response["token_count"],
+            processing_time=processing_time
         )
         
     except Exception as e:
-        logger.error(f"Chat text error: {e}")
-        raise HTTPException(status_code=500, detail=f"Chat error: {str(e)}")
-
-@router.post("/stream")
-async def chat_text_stream(request: ChatRequest):
-    """Streaming chat endpoint"""
-    try:
-        if not llm_service.model:
-            await llm_service.initialize()
-            
-        # For now, return regular response
-        # In production, implement proper streaming
-        output, latency = await llm_service.chat(
-            messages=[msg.dict() for msg in request.messages],
-            temperature=request.temperature or 0.7,
-            top_k=request.top_k or 50,
-            top_p=request.top_p or 0.9,
-            domain=request.domain or "general",
-            max_tokens=200
+        db.rollback()
+        logger.error(f"Error in chat completion: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error processing chat request: {str(e)}"
         )
-        
-        return {"output": output, "latency_ms": latency}
-        
-    except Exception as e:
-        logger.error(f"Streaming chat error: {e}")
-        raise HTTPException(status_code=500, detail=f"Streaming error: {str(e)}")
 
-@router.get("/models")
-async def get_available_models():
-    """Get available models and adapters"""
+@router.delete("/sessions/{session_id}")
+async def delete_chat_session(
+    session_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Delete a chat session"""
     try:
-        model_info = llm_service.get_model_info()
-        return {
-            "base_model": model_info,
-            "fine_tuned_adapters": llm_service.get_available_adapters(),
-            "supported_domains": list(llm_service.domain_prompts.keys())
-        }
+        session = db.query(ChatSession).filter(
+            ChatSession.id == session_id,
+            ChatSession.user_id == current_user.id
+        ).first()
+        
+        if not session:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Chat session not found"
+            )
+        
+        # Delete all messages in the session
+        db.query(DBChatMessage).filter(
+            DBChatMessage.session_id == session_id
+        ).delete()
+        
+        # Delete the session
+        db.delete(session)
+        db.commit()
+        
+        return {"message": "Chat session deleted successfully"}
+        
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error getting models: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        db.rollback()
+        logger.error(f"Error deleting chat session: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error deleting chat session"
+        )

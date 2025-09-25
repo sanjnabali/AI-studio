@@ -1,175 +1,485 @@
-// src/api/client.ts - API Client
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
+import axios from 'axios';
+import type { AxiosInstance, AxiosResponse, AxiosError } from 'axios';
 
-interface LoginResponse {
-  user: {
-    id: string
-    name: string
-    email: string
-  }
-  access_token: string
-  refresh_token?: string
+
+export interface ApiResponse<T = any> {
+  data: T
+  status: number
+  message?: string
 }
 
-interface RegisterResponse extends LoginResponse {}
+export interface ChatMessage {
+  id?: number
+  role: 'user' | 'assistant' | 'system'
+  content: string
+  message_type?: 'text' | 'code' | 'image' | 'audio' | 'file'
+  metadata?: Record<string, any>
+  timestamp?: string
+  token_count?: number
+}
+
+export interface ChatSession {
+  id: number
+  name: string
+  created_at: string
+  updated_at: string
+  message_count: number
+  model_config: Record<string, any>
+}
+
+export interface User {
+  id: number
+  email: string
+  username: string
+  full_name?: string
+  is_active: boolean
+  api_key?: string
+  model_preferences: ModelConfig
+  usage_stats: {
+    total_requests: number
+    total_tokens: number
+    last_request?: number
+  }
+}
+
+export interface ModelConfig {
+  default_model: string
+  temperature: number
+  max_tokens: number
+  top_p: number
+  top_k: number
+  frequency_penalty?: number
+  presence_penalty?: number
+}
+
+export interface Document {
+  id: number
+  filename: string
+  original_filename: string
+  file_size: number
+  file_type: string
+  processed: boolean
+  created_at: string
+  chunk_count: number
+}
+
+export interface CodeExecutionResult {
+  id: number
+  output?: string
+  error?: string
+  execution_time: number
+  status: 'success' | 'error' | 'timeout'
+  language: string
+  memory_used?: number
+}
+
+export interface VoiceResult {
+  text: string
+  confidence: number
+  duration: number
+  language: string
+  processing_time: number
+}
+
+export interface LoginRequest {
+  email: string
+  password: string
+}
+
+export interface RegisterRequest {
+  email: string
+  username: string
+  password: string
+  full_name?: string
+}
+
+export interface AuthResponse {
+  access_token: string
+  refresh_token: string
+  token_type: string
+  expires_in: number
+  user: User
+}
 
 class ApiClient {
-  private baseURL: string
+  private client: AxiosInstance
+  private accessToken: string | null = null
+  private refreshToken: string | null = null
 
-  constructor(baseURL: string = API_BASE_URL) {
-    this.baseURL = baseURL
-  }
+  constructor(baseURL: string = 'http://localhost:8000') {
+    this.client = axios.create({
+      baseURL,
+      timeout: 30000,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    })
 
-  private async request<T>(
-    endpoint: string, 
-    options: RequestInit = {}
-  ): Promise<T> {
-    const url = `${this.baseURL}${endpoint}`
-    
-    // Add auth token if available
-    const token = localStorage.getItem('auth_token')
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      ...((options.headers || {}) as Record<string, string>)
-    }
-    
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`
-    }
+    // Load tokens from localStorage
+    this.accessToken = localStorage.getItem('access_token')
+    this.refreshToken = localStorage.getItem('refresh_token')
 
-    console.log(`🌐 API Request: ${options.method || 'GET'} ${url}`)
-
-    try {
-      const response = await fetch(url, {
-        ...options,
-        headers
-      })
-
-      console.log(`📡 API Response: ${response.status} ${response.statusText}`)
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        let errorMessage = `HTTP ${response.status}: ${response.statusText}`
-        
-        try {
-          const errorData = JSON.parse(errorText)
-          errorMessage = errorData.message || errorData.error || errorMessage
-        } catch {
-          errorMessage = errorText || errorMessage
+    // Request interceptor to add auth header
+    this.client.interceptors.request.use(
+      (config) => {
+        if (this.accessToken) {
+          config.headers.Authorization = `Bearer ${this.accessToken}`
         }
-        
-        throw new Error(errorMessage)
+        return config
+      },
+      (error) => Promise.reject(error)
+    )
+
+    // Response interceptor to handle token refresh
+    this.client.interceptors.response.use(
+      (response) => response,
+      async (error: AxiosError) => {
+        if (error.response?.status === 401 && this.refreshToken) {
+          try {
+            const refreshResponse = await this.client.post('/api/auth/refresh', {
+              refresh_token: this.refreshToken
+            })
+            
+            const { access_token, refresh_token } = refreshResponse.data
+            this.setTokens(access_token, refresh_token)
+            
+            // Retry original request
+            if (error.config) {
+              error.config.headers.Authorization = `Bearer ${access_token}`
+              return this.client.request(error.config)
+            }
+          } catch (refreshError) {
+            this.clearTokens()
+            window.location.href = '/auth'
+          }
+        }
+        return Promise.reject(error)
       }
-
-      const data = await response.json()
-      console.log('✅ API Success:', { endpoint, data: !!data })
-      return data
-    } catch (error) {
-      console.error('❌ API Error:', { endpoint, error })
-      throw error
-    }
+    )
   }
 
-  // Authentication endpoints
-  async login(credentials: { email: string; password: string }): Promise<LoginResponse> {
-    return this.request<LoginResponse>('/auth/login', {
-      method: 'POST',
-      body: JSON.stringify(credentials)
-    })
+  private setTokens(accessToken: string, refreshToken: string): void {
+    this.accessToken = accessToken
+    this.refreshToken = refreshToken
+    localStorage.setItem('access_token', accessToken)
+    localStorage.setItem('refresh_token', refreshToken)
   }
 
-  async register(credentials: { 
-    name: string; 
-    email: string; 
-    password: string; 
-    confirmPassword: string 
-  }): Promise<RegisterResponse> {
-    return this.request<RegisterResponse>('/auth/register', {
-      method: 'POST',
-      body: JSON.stringify(credentials)
-    })
+  private clearTokens(): void {
+    this.accessToken = null
+    this.refreshToken = null
+    localStorage.removeItem('access_token')
+    localStorage.removeItem('refresh_token')
+  }
+
+  // Auth endpoints
+  async login(credentials: LoginRequest): Promise<AuthResponse> {
+    const response = await this.client.post<AuthResponse>('/api/auth/login', credentials)
+    this.setTokens(response.data.access_token, response.data.refresh_token)
+    return response.data
+  }
+
+  async register(userData: RegisterRequest): Promise<AuthResponse> {
+    const response = await this.client.post<AuthResponse>('/api/auth/register', userData)
+    this.setTokens(response.data.access_token, response.data.refresh_token)
+    return response.data
   }
 
   async logout(): Promise<void> {
-    return this.request<void>('/auth/logout', {
-      method: 'POST'
-    })
-  }
-
-  async refreshToken(): Promise<LoginResponse> {
-    const refreshToken = localStorage.getItem('refresh_token')
-    if (!refreshToken) {
-      throw new Error('No refresh token available')
+    try {
+      await this.client.post('/api/auth/logout')
+    } finally {
+      this.clearTokens()
     }
-
-    return this.request<LoginResponse>('/auth/refresh', {
-      method: 'POST',
-      body: JSON.stringify({ refresh_token: refreshToken })
-    })
   }
 
-  async getCurrentUser(): Promise<{ user: { id: string; name: string; email: string } }> {
-    return this.request<{ user: { id: string; name: string; email: string } }>('/auth/me')
+  async getCurrentUser(): Promise<User> {
+    const response = await this.client.get<User>('/api/auth/me')
+    return response.data
+  }
+
+  async updateModelPreferences(preferences: ModelConfig): Promise<void> {
+    await this.client.put('/api/auth/preferences', preferences)
+  }
+
+  async updateProfile(profileData: { name: string; email: string }): Promise<{ user: User }> {
+    const response = await this.client.put<{ user: User }>('/api/auth/profile', profileData)
+    return response.data
+  }
+
+  async changePassword(passwordData: { currentPassword: string; newPassword: string }): Promise<void> {
+    await this.client.put('/api/auth/change-password', passwordData)
   }
 
   // Chat endpoints
-  async sendTextMessage(request: any): Promise<any> {
-    return this.request<any>('/chat/text', {
-      method: 'POST',
-      body: JSON.stringify(request)
-    })
+  async getChatSessions(): Promise<ChatSession[]> {
+    const response = await this.client.get<ChatSession[]>('/api/chat/sessions')
+    return response.data
   }
 
-  async sendRAGMessage(request: any): Promise<any> {
-    return this.request<any>('/chat/rag', {
-      method: 'POST',
-      body: JSON.stringify(request)
+  async createChatSession(name?: string, modelConfig?: Record<string, any>): Promise<ChatSession> {
+    const response = await this.client.post<ChatSession>('/api/chat/sessions', {
+      name,
+      model_config: modelConfig
     })
+    return response.data
   }
 
-  async executeCode(request: any): Promise<any> {
-    return this.request<any>('/code/execute', {
-      method: 'POST',
-      body: JSON.stringify(request)
-    })
+  async getSessionMessages(sessionId: number): Promise<ChatMessage[]> {
+    const response = await this.client.get<ChatMessage[]>(`/api/chat/sessions/${sessionId}/messages`)
+    return response.data
   }
 
-  async transcribeAudio(audioFile: File): Promise<any> {
+  async sendChatMessage(message: string, sessionId?: number, modelConfig?: Record<string, any>): Promise<{
+    message: string
+    session_id: number
+    message_id: number
+    model_used: string
+    token_count: number
+    processing_time: number
+  }> {
+    const response = await this.client.post('/api/chat/chat', {
+      message,
+      session_id: sessionId,
+      model_config: modelConfig
+    })
+    return response.data
+  }
+
+  async deleteChatSession(sessionId: number): Promise<void> {
+    await this.client.delete(`/api/chat/sessions/${sessionId}`)
+  }
+
+  // RAG endpoints
+  async uploadDocument(file: File): Promise<{
+    status: string
+    document_id: number
+    filename: string
+    chunks_processed: number
+    message: string
+  }> {
+    const formData = new FormData()
+    formData.append('file', file)
+    
+    const response = await this.client.post('/api/rag/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    })
+    return response.data
+  }
+
+  async getDocuments(): Promise<Document[]> {
+    const response = await this.client.get<Document[]>('/api/rag/documents')
+    return response.data
+  }
+
+  async queryDocuments(
+    query: string, 
+    documentNames?: string[], 
+    modelConfig?: Record<string, any>
+  ): Promise<{
+    response: string
+    sources: Array<{
+      document: string
+      chunk_id: string
+      similarity: number
+    }>
+    model_used: string
+    processing_time: number
+    token_count: number
+    context_used: number
+  }> {
+    const response = await this.client.post('/api/rag/query', {
+      query,
+      document_names: documentNames,
+      model_config: modelConfig
+    })
+    return response.data
+  }
+
+  async deleteDocument(documentId: number): Promise<void> {
+    await this.client.delete(`/api/rag/documents/${documentId}`)
+  }
+
+  // Voice endpoints
+  async speechToText(audioFile: File): Promise<VoiceResult> {
     const formData = new FormData()
     formData.append('audio', audioFile)
-
-    return this.request<any>('/audio/transcribe', {
-      method: 'POST',
-      body: formData,
-      headers: {} // Let browser set Content-Type for FormData
+    
+    const response = await this.client.post<VoiceResult>('/api/voice/speech-to-text', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
     })
+    return response.data
   }
 
-  async uploadDocuments(files: File[]): Promise<any> {
-    const formData = new FormData()
-    files.forEach(file => formData.append('files', file))
-
-    return this.request<any>('/documents/upload', {
-      method: 'POST',
-      body: formData,
-      headers: {} // Let browser set Content-Type for FormData
+  async textToSpeech(text: string, voiceStyle?: string, speed?: number): Promise<{
+    audio_data: string
+    duration: number
+    processing_time: number
+    text: string
+  }> {
+    const response = await this.client.post('/api/voice/text-to-speech', {
+      text,
+      voice_style: voiceStyle,
+      speed
     })
+    return response.data
   }
 
-  // System endpoints
-  async checkHealth(): Promise<any> {
-    return this.request<any>('/health')
+  // Code execution endpoints
+  async executeCode(
+    code: string, 
+    language: string, 
+    timeout?: number, 
+    inputs?: string[]
+  ): Promise<CodeExecutionResult> {
+    const response = await this.client.post<CodeExecutionResult>('/api/code/execute', {
+      code,
+      language,
+      timeout,
+      inputs
+    })
+    return response.data
   }
 
-  async getModelStatus(): Promise<any> {
-    return this.request<any>('/models/status')
+  async generateCode(
+    prompt: string, 
+    language: string = 'python', 
+    complexity: string = 'simple',
+    includeTests: boolean = false,
+    modelConfig?: Record<string, any>
+  ): Promise<{
+    code: string
+    explanation: string
+    language: string
+    model_used: string
+    processing_time: number
+    tests?: string
+  }> {
+    const response = await this.client.post('/api/code/generate', {
+      prompt,
+      language,
+      complexity,
+      include_tests: includeTests,
+      model_config: modelConfig
+    })
+    return response.data
   }
 
-  async getSupportedLanguages(): Promise<string[]> {
-    const response = await this.request<{ languages: string[] }>('/code/languages')
-    return response.languages || ['python', 'javascript', 'html', 'css']
+  async analyzeCode(
+    code: string, 
+    language: string, 
+    analysisType: string = 'full'
+  ): Promise<{
+    analysis: string
+    suggestions: string[]
+    complexity_score: number
+    issues: Array<{
+      type: string
+      message: string
+      severity: string
+    }>
+    processing_time: number
+  }> {
+    const response = await this.client.post('/api/code/analyze', {
+      code,
+      language,
+      analysis_type: analysisType
+    })
+    return response.data
+  }
+
+  async getCodeExecutions(limit: number = 20): Promise<Array<{
+    id: number
+    language: string
+    code_preview: string
+    status: string
+    execution_time: number
+    created_at: string
+    has_output: boolean
+    has_error: boolean
+  }>> {
+    const response = await this.client.get(`/api/code/executions?limit=${limit}`)
+    return response.data
+  }
+
+  // Image endpoints
+  async generateImage(
+    prompt: string,
+    width: number = 512,
+    height: number = 512,
+    style: string = 'realistic'
+  ): Promise<{
+    image_data: string
+    prompt: string
+    width: number
+    height: number
+    processing_time: number
+  }> {
+    const response = await this.client.post('/api/image/generate', {
+      prompt,
+      width,
+      height,
+      style
+    })
+    return response.data
+  }
+
+  async analyzeImage(imageData: string, prompt: string = 'Describe this image'): Promise<{
+    analysis: string
+    prompt: string
+    image_dimensions: { width: number, height: number }
+    confidence: number
+  }> {
+    const response = await this.client.post('/api/image/analyze', {
+      image_data: imageData,
+      prompt
+    })
+    return response.data
+  }
+
+  // Health check
+  async healthCheck(): Promise<{ status: string, version: string, service: string }> {
+    const response = await this.client.get('/health')
+    return response.data
+  }
+
+  // Get supported languages for code execution
+  async getSupportedLanguages(): Promise<{
+    supported_languages: Array<{
+      name: string
+      code: string
+      version: string
+      features: string[]
+      libraries: string[]
+    }>
+    execution_limits: {
+      max_execution_time: number
+      max_code_size: string
+      max_memory: string
+    }
+  }> {
+    const response = await this.client.get('/api/code/languages')
+    return response.data
+  }
+
+  // Get voice supported formats
+  async getVoiceSupportedFormats(): Promise<{
+    input_formats: string[]
+    output_format: string
+    max_file_size: string
+    max_duration: string
+    sample_rate: string
+    channels: string
+  }> {
+    const response = await this.client.get('/api/voice/supported-formats')
+    return response.data
   }
 }
 
+// Create singleton instance
 export const apiClient = new ApiClient()
-export type { LoginResponse, RegisterResponse }
+export default apiClient

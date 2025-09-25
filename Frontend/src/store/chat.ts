@@ -1,271 +1,143 @@
-// src/store/chat.ts - Fixed Chat Store
+
+// Frontend/src/store/chat.ts
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { apiClient } from '../api/client'
-
-// Interfaces
-interface ChatMessage {
-  id: string
-  role: 'user' | 'assistant'
-  content: string
-  timestamp: Date
-  type: 'text' | 'image' | 'voice' | 'file'
-  metadata: {
-    model?: string
-    latency?: number
-    sources?: string[]
-    citations?: string[]
-    [key: string]: any
-  }
-}
-
-interface Chat {
-  id: string
-  title: string
-  messages: ChatMessage[]
-  created: Date
-  updated: Date
-  settings: {
-    model: string
-    temperature: number
-    maxTokens: number
-    domain: string
-  }
-}
-
-interface ChatRequest {
-  domain?: string
-  useRAG?: boolean
-  temperature?: number
-  maxTokens?: number
-}
-
-interface SystemHealth {
-  status: string
-  models_status: string
-  ready_for_chat: boolean
-  performance_mode: boolean
-}
+import { apiClient, type ChatSession, type ChatMessage } from '@/api/client'
 
 export const useChatStore = defineStore('chat', () => {
-  // State
-  const chats = ref<Chat[]>([])
-  const activeChat = ref<Chat | null>(null)
+  const sessions = ref<ChatSession[]>([])
+  const currentSession = ref<ChatSession | null>(null)
+  const messages = ref<ChatMessage[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
-  const systemHealth = ref<SystemHealth | null>(null)
-  const supportedLanguages = ref<string[]>(['python', 'javascript', 'html', 'css', 'java', 'cpp'])
-  const modelStatus = ref<any>(null)
+  const isTyping = ref(false)
 
-  // Computed
-  const activeChatMessages = computed(() => activeChat.value?.messages || [])
-  const isSystemReady = computed(() => systemHealth.value?.ready_for_chat || false)
+  const currentSessionId = computed(() => currentSession.value?.id)
+  const hasMessages = computed(() => messages.value.length > 0)
 
-  // Actions
-  function createChat(title?: string): Chat {
-    const chat: Chat = {
-      id: generateId(),
-      title: title || 'New Chat',
-      messages: [],
-      created: new Date(),
-      updated: new Date(),
-      settings: {
-        model: 'gemini-pro',
-        temperature: 0.7,
-        maxTokens: 1024,
-        domain: 'general'
-      }
-    }
+  // Alias for sessions to match component expectations
+  const chats = computed(() => sessions.value)
 
-    chats.value.unshift(chat)
-    activeChat.value = chat
-    return chat
-  }
-
-  function selectChat(chatId: string): void {
-    const chat = chats.value.find(c => c.id === chatId)
-    if (chat) {
-      activeChat.value = chat
-    }
-  }
-
-  function deleteChat(chatId: string): void {
-    const index = chats.value.findIndex(c => c.id === chatId)
-    if (index > -1) {
-      chats.value.splice(index, 1)
-      
-      // If deleted chat was active, select another or create new
-      if (activeChat.value?.id === chatId) {
-        if (chats.value.length > 0) {
-          activeChat.value = chats.value[0]
-        } else {
-          createChat()
-        }
-      }
-    }
-  }
-
-  function updateChatTitle(chatId: string, title: string): void {
-    const chat = chats.value.find(c => c.id === chatId)
-    if (chat) {
-      chat.title = title
-      chat.updated = new Date()
-    }
-  }
-
-  async function sendMessage(content: string, options: ChatRequest = {}): Promise<void> {
-    if (!activeChat.value) {
-      createChat()
-    }
-
-    if (!activeChat.value) return
-
+  async function loadSessions(): Promise<void> {
     loading.value = true
-    error.value = null
-
-    // Add user message
-    const userMessage: ChatMessage = {
-      id: generateId(),
-      role: 'user',
-      content,
-      timestamp: new Date(),
-      type: 'text',
-      metadata: {}
-    }
-
-    activeChat.value.messages.push(userMessage)
-    activeChat.value.updated = new Date()
-
-    // Auto-generate title for first message
-    if (activeChat.value.messages.length === 1) {
-      activeChat.value.title = content.slice(0, 50) + (content.length > 50 ? '...' : '')
-    }
-
     try {
-      // Prepare request
-      const requestMessages = activeChat.value.messages.map(msg => ({
-        role: msg.role,
-        content: msg.content
-      }))
-
-      const request = {
-        messages: requestMessages,
-        domain: options.domain || activeChat.value.settings.domain,
-        temperature: options.temperature || activeChat.value.settings.temperature,
-        max_new_tokens: options.maxTokens || activeChat.value.settings.maxTokens,
-        use_rag: options.useRAG || false
-      }
-
-      // Send to appropriate endpoint
-      const response = options.useRAG 
-        ? await apiClient.sendRAGMessage(request)
-        : await apiClient.sendTextMessage(request)
-
-      // Add assistant response
-      const assistantMessage: ChatMessage = {
-        id: generateId(),
-        role: 'assistant',
-        content: response.response || response.result || response.text || response.output || 'No response',
-        timestamp: new Date(),
-        type: 'text',
-        metadata: {
-          model: activeChat.value.settings.model,
-          latency: response.latency_ms,
-          sources: response.sources,
-          citations: response.citations
-        }
-      }
-
-      activeChat.value.messages.push(assistantMessage)
-      activeChat.value.updated = new Date()
-
-    } catch (err) {
-      error.value = err instanceof Error ? err.message : 'Failed to send message'
-      console.error('Send message error:', err)
+      sessions.value = await apiClient.getChatSessions()
+    } catch (err: any) {
+      error.value = 'Failed to load chat sessions'
+      console.error(err)
     } finally {
       loading.value = false
     }
   }
 
-  async function executeCode(code: string, language: string = 'python'): Promise<any> {
+  async function createSession(name?: string, modelConfig?: Record<string, any>): Promise<ChatSession> {
     try {
-      const response = await apiClient.executeCode({
-        code,
-        language,
-        timeout: 30000
-      })
-      return response
-    } catch (err) {
-      return {
-        success: false,
-        error: err instanceof Error ? err.message : 'Code execution failed',
-        output: '',
-        executionTime: 0
-      }
+      const session = await apiClient.createChatSession(name, modelConfig)
+      sessions.value.unshift(session)
+      return session
+    } catch (err: any) {
+      error.value = 'Failed to create chat session'
+      throw err
     }
   }
 
-  async function transcribeAudio(audioFile: File): Promise<any> {
-    try {
-      const response = await apiClient.transcribeAudio(audioFile)
-      return {
-        success: true,
-        transcription: response.transcription
-      }
-    } catch (err) {
-      return {
-        success: false,
-        error: err instanceof Error ? err.message : 'Transcription failed'
-      }
+  async function selectSession(sessionId: number): Promise<void> {
+    const session = sessions.value.find(s => s.id === sessionId)
+    if (session) {
+      currentSession.value = session
+      await loadMessages(sessionId)
     }
   }
 
-  async function uploadDocuments(files: File[]): Promise<any> {
+  async function loadMessages(sessionId: number): Promise<void> {
+    loading.value = true
     try {
-      const response = await apiClient.uploadDocuments(files)
-      return {
-        success: true,
-        files: response.files
-      }
-    } catch (err) {
-      return {
-        success: false,
-        error: err instanceof Error ? err.message : 'Upload failed'
-      }
+      messages.value = await apiClient.getSessionMessages(sessionId)
+    } catch (err: any) {
+      error.value = 'Failed to load messages'
+      console.error(err)
+    } finally {
+      loading.value = false
     }
   }
 
-  async function checkSystemHealth(): Promise<void> {
+  async function sendMessage(
+    content: string, 
+    sessionId?: number, 
+    modelConfig?: Record<string, any>
+  ): Promise<void> {
+    isTyping.value = true
+    
+    // Add user message immediately
+    const userMessage: ChatMessage = {
+      role: 'user',
+      content,
+      message_type: 'text',
+      timestamp: new Date().toISOString()
+    }
+    messages.value.push(userMessage)
+
     try {
-      const health = await apiClient.checkHealth()
-      systemHealth.value = health
-    } catch (err) {
-      console.warn('Health check failed:', err)
-      systemHealth.value = {
-        status: 'error',
-        models_status: 'offline',
-        ready_for_chat: false,
-        performance_mode: false
+      const response = await apiClient.sendChatMessage(content, sessionId, modelConfig)
+      
+      // Add assistant response
+      const assistantMessage: ChatMessage = {
+        id: response.message_id,
+        role: 'assistant',
+        content: response.message,
+        message_type: 'text',
+        timestamp: new Date().toISOString(),
+        metadata: {
+          model_used: response.model_used,
+          processing_time: response.processing_time,
+          token_count: response.token_count
+        }
       }
+      messages.value.push(assistantMessage)
+
+      // Update current session if needed
+      if (!currentSession.value && response.session_id) {
+        await loadSessions()
+        const session = sessions.value.find(s => s.id === response.session_id)
+        if (session) {
+          currentSession.value = session
+        }
+      }
+
+    } catch (err: any) {
+      error.value = err.response?.data?.detail || 'Failed to send message'
+      console.error(err)
+      
+      // Add error message
+      const errorMessage: ChatMessage = {
+        role: 'assistant',
+        content: 'Sorry, I encountered an error processing your message. Please try again.',
+        message_type: 'text',
+        timestamp: new Date().toISOString()
+      }
+      messages.value.push(errorMessage)
+    } finally {
+      isTyping.value = false
     }
   }
 
-  async function getModelStatus(): Promise<void> {
+  async function deleteSession(sessionId: number): Promise<void> {
     try {
-      const status = await apiClient.getModelStatus()
-      modelStatus.value = status
-    } catch (err) {
-      console.warn('Model status check failed:', err)
+      await apiClient.deleteChatSession(sessionId)
+      sessions.value = sessions.value.filter(s => s.id !== sessionId)
+      
+      if (currentSession.value?.id === sessionId) {
+        currentSession.value = null
+        messages.value = []
+      }
+    } catch (err: any) {
+      error.value = 'Failed to delete session'
+      throw err
     }
   }
 
-  async function getSupportedLanguages(): Promise<void> {
-    try {
-      const languages = await apiClient.getSupportedLanguages()
-      supportedLanguages.value = languages
-    } catch (err) {
-      console.warn('Failed to get supported languages:', err)
-    }
+  function clearMessages(): void {
+    messages.value = []
   }
 
   function clearError(): void {
@@ -273,94 +145,29 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function clearChats(): void {
-    chats.value = []
-    activeChat.value = null
+    sessions.value = []
+    currentSession.value = null
+    messages.value = []
   }
-
-  async function initialize(): Promise<void> {
-    try {
-      // Load chats from localStorage
-      const savedChats = localStorage.getItem('ai_studio_chats')
-      if (savedChats) {
-        const parsedChats = JSON.parse(savedChats)
-        chats.value = parsedChats.map((chat: any) => ({
-          ...chat,
-          created: new Date(chat.created),
-          updated: new Date(chat.updated),
-          messages: chat.messages.map((msg: any) => ({
-            ...msg,
-            timestamp: new Date(msg.timestamp)
-          }))
-        }))
-
-        if (chats.value.length > 0) {
-          activeChat.value = chats.value[0]
-        }
-      }
-
-      // Initialize system
-      await Promise.all([
-        checkSystemHealth(),
-        getModelStatus(),
-        getSupportedLanguages()
-      ])
-
-      // Create first chat if none exist
-      if (chats.value.length === 0) {
-        createChat()
-      }
-
-    } catch (err) {
-      console.error('Initialization error:', err)
-    }
-  }
-
-  // Save chats to localStorage whenever they change
-  function saveChats(): void {
-    try {
-      localStorage.setItem('ai_studio_chats', JSON.stringify(chats.value))
-    } catch (err) {
-      console.warn('Failed to save chats:', err)
-    }
-  }
-
-  // Utility functions
-  function generateId(): string {
-    return crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substr(2, 9)
-  }
-
-  // Watch for changes and save
-  chats.value && saveChats()
 
   return {
-    // State
+    sessions,
     chats,
-    activeChat,
+    currentSession,
+    messages,
     loading,
     error,
-    systemHealth,
-    supportedLanguages,
-    modelStatus,
-
-    // Computed
-    activeChatMessages,
-    isSystemReady,
-
-    // Actions
-    createChat,
-    selectChat,
-    deleteChat,
-    updateChatTitle,
+    isTyping,
+    currentSessionId,
+    hasMessages,
+    loadSessions,
+    createSession,
+    selectSession,
+    loadMessages,
     sendMessage,
-    executeCode,
-    transcribeAudio,
-    uploadDocuments,
-    checkSystemHealth,
-    getModelStatus,
-    getSupportedLanguages,
-    clearError,
+    deleteSession,
+    clearMessages,
     clearChats,
-    initialize,
-    saveChats
+    clearError
   }
 })

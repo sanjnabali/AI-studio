@@ -1,421 +1,414 @@
-import faiss
-import numpy as np
-from sentence_transformers import SentenceTransformer
-from typing import List, Dict, Optional, Any, Tuple
-import logging
-import json
-import pickle
-from pathlib import Path
+# Backend/app/services/rag_engine.py
+import os
 import asyncio
-from dataclasses import dataclass
 import hashlib
-from datetime import datetime
-import sqlite3
+from typing import List, Dict, Any, Optional
+import logging
+from config.settings import settings
+
+# Disable ChromaDB telemetry before importing
+os.environ["CHROMADB_DISABLE_TELEMETRY"] = "true"
+
+# Patch posthog to prevent telemetry errors
+try:
+    import posthog
+    # Monkey patch the capture method to prevent errors
+    original_capture = posthog.capture
+    def safe_capture(*args, **kwargs):
+        try:
+            return original_capture(*args, **kwargs)
+        except Exception:
+            pass  # Silently ignore telemetry errors
+    posthog.capture = safe_capture
+except ImportError:
+    pass
+
+import chromadb
+from chromadb.config import Settings
+from sentence_transformers import SentenceTransformer
+import fitz  # PyMuPDF
+import docx
+import pandas as pd
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-@dataclass
-class Document:
-    """Document representation for RAG"""
-    id: str
-    content: str
-    metadata: Dict[str, Any]
-    embedding: Optional[np.ndarray] = None
-    timestamp: Optional[datetime] = None
-
-@dataclass
-class RAGConfig:
-    """RAG configuration"""
-    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
-    chunk_size: int = 512
-    chunk_overlap: int = 50
-    similarity_threshold: float = 0.7
-    max_results: int = 5
-    index_type: str = "flat"  # "flat" or "ivf"
+class DocumentProcessor:
+    """Handles document ingestion and text extraction"""
+    
+    @staticmethod
+    def extract_text_from_pdf(file_path: str) -> List[Dict[str, Any]]:
+        """Extract text from PDF file"""
+        try:
+            doc = fitz.open(file_path)
+            chunks = []
+            
+            for page_num in range(len(doc)):
+                page = doc[page_num]
+                text = page.get_text()
+                
+                if text.strip():  # Only process non-empty pages
+                    # Split into smaller chunks (roughly 500 words)
+                    words = text.split()
+                    chunk_size = 500
+                    
+                    for i in range(0, len(words), chunk_size):
+                        chunk_text = ' '.join(words[i:i + chunk_size])
+                        if len(chunk_text.strip()) > 50:  # Ignore very small chunks
+                            chunks.append({
+                                'text': chunk_text,
+                                'page': page_num + 1,
+                                'chunk_id': f"page_{page_num + 1}_chunk_{i // chunk_size + 1}"
+                            })
+            
+            doc.close()
+            return chunks
+            
+        except Exception as e:
+            logger.error(f"Error extracting text from PDF {file_path}: {str(e)}")
+            return []
+    
+    @staticmethod
+    def extract_text_from_docx(file_path: str) -> List[Dict[str, Any]]:
+        """Extract text from DOCX file"""
+        try:
+            doc = docx.Document(file_path)
+            full_text = []
+            
+            for paragraph in doc.paragraphs:
+                if paragraph.text.strip():
+                    full_text.append(paragraph.text)
+            
+            text = '\n'.join(full_text)
+            words = text.split()
+            chunks = []
+            chunk_size = 500
+            
+            for i in range(0, len(words), chunk_size):
+                chunk_text = ' '.join(words[i:i + chunk_size])
+                if len(chunk_text.strip()) > 50:
+                    chunks.append({
+                        'text': chunk_text,
+                        'paragraph_range': f"{i}-{min(i + chunk_size, len(words))}",
+                        'chunk_id': f"docx_chunk_{i // chunk_size + 1}"
+                    })
+            
+            return chunks
+            
+        except Exception as e:
+            logger.error(f"Error extracting text from DOCX {file_path}: {str(e)}")
+            return []
+    
+    @staticmethod
+    def extract_text_from_txt(file_path: str) -> List[Dict[str, Any]]:
+        """Extract text from TXT file"""
+        try:
+            with open(file_path, 'r', encoding='utf-8') as file:
+                text = file.read()
+            
+            words = text.split()
+            chunks = []
+            chunk_size = 500
+            
+            for i in range(0, len(words), chunk_size):
+                chunk_text = ' '.join(words[i:i + chunk_size])
+                if len(chunk_text.strip()) > 50:
+                    chunks.append({
+                        'text': chunk_text,
+                        'word_range': f"{i}-{min(i + chunk_size, len(words))}",
+                        'chunk_id': f"txt_chunk_{i // chunk_size + 1}"
+                    })
+            
+            return chunks
+            
+        except Exception as e:
+            logger.error(f"Error extracting text from TXT {file_path}: {str(e)}")
+            return []
 
 class RAGEngine:
-    """Enhanced RAG engine with document management and persistence"""
+    """Retrieval-Augmented Generation Engine"""
     
-    def __init__(self, config: Optional[RAGConfig] = None, storage_path: str = "./rag_storage"):
-        self.config = config or RAGConfig()
-        self.storage_path = Path(storage_path)
-        self.storage_path.mkdir(exist_ok=True)
-        
-        # Initialize components
+    def __init__(self):
         self.embedding_model = None
-        self.index = None
-        self.documents: Dict[str, Document] = {}
-        self.document_embeddings = []
+        self.chroma_client = None
+        self.collections: Dict[str, Any] = {}
         
-        # Database for metadata
-        self.db_path = self.storage_path / "metadata.db"
-        self.init_database()
-    
-    def init_database(self):
-        """Initialize SQLite database for metadata"""
-        conn = sqlite3.connect(str(self.db_path))
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS documents (
-                id TEXT PRIMARY KEY,
-                content TEXT,
-                metadata TEXT,
-                timestamp TEXT,
-                content_hash TEXT
-            )
-        """)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS collections (
-                id TEXT PRIMARY KEY,
-                name TEXT,
-                description TEXT,
-                document_count INTEGER,
-                created_at TEXT
-            )
-        """)
-        conn.commit()
-        conn.close()
-    
     async def initialize(self):
         """Initialize the RAG engine"""
-        logger.info("Initializing RAG Engine...")
-        
         try:
-            # Load embedding model
-            logger.info(f"Loading embedding model: {self.config.embedding_model}")
-            self.embedding_model = SentenceTransformer(self.config.embedding_model)
-            
-            # Load existing index and documents
-            await self.load_from_disk()
-            
-            logger.info(f"RAG Engine initialized with {len(self.documents)} documents")
-            
+            # Disable ChromaDB telemetry completely
+            os.environ["CHROMADB_DISABLE_TELEMETRY"] = "true"
+
+            # Initialize embedding model
+            logger.info("Loading embedding model...")
+            self.embedding_model = SentenceTransformer(settings.EMBEDDING_MODEL)
+
+            # Initialize ChromaDB
+            os.makedirs(settings.CHROMA_DB_PATH, exist_ok=True)
+            self.chroma_client = chromadb.PersistentClient(
+                path=settings.CHROMA_DB_PATH,
+                settings=Settings(anonymized_telemetry=False, is_persistent=True)
+            )
+
+            logger.info("RAG engine initialized successfully")
+
         except Exception as e:
-            logger.error(f"Failed to initialize RAG engine: {e}")
+            logger.error(f"Error initializing RAG engine: {str(e)}")
             raise
     
-    def chunk_text(self, text: str) -> List[str]:
-        """Split text into overlapping chunks"""
-        if len(text) <= self.config.chunk_size:
-            return [text]
-        
-        chunks = []
-        start = 0
-        
-        while start < len(text):
-            end = start + self.config.chunk_size
-            
-            # Try to break at sentence boundaries
-            if end < len(text):
-                # Find the last sentence ending before the limit
-                last_period = text.rfind('.', start, end)
-                last_exclamation = text.rfind('!', start, end)
-                last_question = text.rfind('?', start, end)
-                
-                best_end = max(last_period, last_exclamation, last_question)
-                if best_end > start:
-                    end = best_end + 1
-            
-            chunk = text[start:end].strip()
-            if chunk:
-                chunks.append(chunk)
-            
-            start = max(start + self.config.chunk_size - self.config.chunk_overlap, end)
-        
-        return chunks
+    def _generate_collection_name(self, user_id: int, document_name: str) -> str:
+        """Generate a unique collection name for user and document"""
+        hash_input = f"{user_id}_{document_name}".encode('utf-8')
+        hash_hex = hashlib.md5(hash_input).hexdigest()[:8]
+        return f"user_{user_id}_doc_{hash_hex}"
     
-    async def add_document(self, 
-                          content: str, 
-                          metadata: Optional[Dict[str, Any]] = None,
-                          doc_id: Optional[str] = None) -> str:
-        """Add a document to the RAG system"""
-        
-        if not self.embedding_model:
-            raise ValueError("RAG engine not initialized")
-        
-        # Generate document ID if not provided
-        if doc_id is None:
-            content_hash = hashlib.md5(content.encode()).hexdigest()
-            doc_id = f"doc_{content_hash[:12]}"
-        
-        metadata = metadata or {}
-        metadata['added_at'] = datetime.now().isoformat()
-        
+    async def process_document(self, 
+                             file_path: str, 
+                             user_id: int, 
+                             document_name: str) -> Dict[str, Any]:
+        """Process and ingest a document into the vector database"""
         try:
-            # Chunk the document
-            chunks = self.chunk_text(content)
-            logger.info(f"Document {doc_id} split into {len(chunks)} chunks")
+            # Extract text based on file type
+            file_ext = Path(file_path).suffix.lower()
             
-            # Generate embeddings for all chunks
-            embeddings = await asyncio.get_event_loop().run_in_executor(
-                None, self.embedding_model.encode, chunks
+            if file_ext == '.pdf':
+                chunks = DocumentProcessor.extract_text_from_pdf(file_path)
+            elif file_ext == '.docx':
+                chunks = DocumentProcessor.extract_text_from_docx(file_path)
+            elif file_ext == '.txt':
+                chunks = DocumentProcessor.extract_text_from_txt(file_path)
+            else:
+                raise ValueError(f"Unsupported file type: {file_ext}")
+            
+            if not chunks:
+                raise ValueError("No text content extracted from document")
+            
+            # Generate embeddings
+            texts = [chunk['text'] for chunk in chunks]
+            embeddings = self.embedding_model.encode(texts, convert_to_tensor=False)
+            
+            # Create or get collection
+            collection_name = self._generate_collection_name(user_id, document_name)
+            
+            try:
+                collection = self.chroma_client.create_collection(
+                    name=collection_name,
+                    metadata={"user_id": user_id, "document_name": document_name}
+                )
+            except Exception:
+                # Collection might already exist
+                collection = self.chroma_client.get_collection(name=collection_name)
+            
+            # Prepare data for insertion
+            ids = [f"{document_name}_{i}" for i in range(len(chunks))]
+            metadatas = []
+            
+            for i, chunk in enumerate(chunks):
+                metadata = {
+                    "user_id": str(user_id),
+                    "document_name": document_name,
+                    "chunk_id": chunk.get('chunk_id', f'chunk_{i}'),
+                    "file_type": file_ext
+                }
+                metadata.update({k: str(v) for k, v in chunk.items() if k != 'text'})
+                metadatas.append(metadata)
+            
+            # Insert into ChromaDB
+            collection.add(
+                embeddings=embeddings.tolist(),
+                documents=texts,
+                metadatas=metadatas,
+                ids=ids
             )
             
-            # Store chunks as separate documents
-            chunk_ids = []
-            for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
-                chunk_id = f"{doc_id}_chunk_{i}"
-                chunk_metadata = {**metadata, "chunk_id": i, "parent_doc": doc_id}
-                
-                document = Document(
-                    id=chunk_id,
-                    content=chunk,
-                    metadata=chunk_metadata,
-                    embedding=embedding,
-                    timestamp=datetime.now()
-                )
-                
-                self.documents[chunk_id] = document
-                self.document_embeddings.append(embedding)
-                chunk_ids.append(chunk_id)
+            self.collections[collection_name] = collection
             
-            # Update FAISS index
-            await self.rebuild_index()
-            
-            # Save to database
-            await self.save_document_to_db(doc_id, content, metadata)
-            
-            logger.info(f"Added document {doc_id} with {len(chunks)} chunks")
-            return doc_id
+            return {
+                "status": "success",
+                "collection_name": collection_name,
+                "chunks_processed": len(chunks),
+                "document_name": document_name
+            }
             
         except Exception as e:
-            logger.error(f"Error adding document {doc_id}: {e}")
-            raise
+            logger.error(f"Error processing document {document_name}: {str(e)}")
+            return {
+                "status": "error",
+                "error": str(e),
+                "document_name": document_name
+            }
     
-    async def rebuild_index(self):
-        """Rebuild the FAISS index"""
-        if not self.document_embeddings:
-            return
-        
-        embeddings_array = np.array(self.document_embeddings).astype('float32')
-        dimension = embeddings_array.shape[1]
-        
-        if self.config.index_type == "ivf" and len(self.document_embeddings) > 100:
-            # Use IVF index for larger collections
-            nlist = min(100, len(self.document_embeddings) // 10)
-            quantizer = faiss.IndexFlatL2(dimension)
-            self.index = faiss.IndexIVFFlat(quantizer, dimension, nlist)
-            self.index.train(embeddings_array)
-        else:
-            # Use flat index for smaller collections
-            self.index = faiss.IndexFlatL2(dimension)
-        
-        self.index.add(embeddings_array)
-        logger.info(f"Rebuilt index with {len(self.document_embeddings)} embeddings")
-    
-    async def query(self, 
-                   query: str, 
-                   top_k: int = None,
-                   similarity_threshold: float = None,
-                   filter_metadata: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
-        """Query the RAG system"""
-        
-        if not self.embedding_model or not self.index:
-            raise ValueError("RAG engine not initialized or no documents indexed")
-        
-        top_k = top_k or self.config.max_results
-        similarity_threshold = similarity_threshold or self.config.similarity_threshold
-        
+    async def search_documents(self, 
+                             query: str, 
+                             user_id: int, 
+                             document_names: Optional[List[str]] = None,
+                             top_k: int = 5) -> List[Dict[str, Any]]:
+        """Search for relevant document chunks"""
         try:
             # Generate query embedding
-            query_embedding = await asyncio.get_event_loop().run_in_executor(
-                None, self.embedding_model.encode, [query]
-            )
-            query_embedding = query_embedding.astype('float32')
-            
-            # Search index
-            distances, indices = self.index.search(query_embedding, top_k * 2)  # Get extra results for filtering
+            query_embedding = self.embedding_model.encode([query], convert_to_tensor=False)
             
             results = []
-            document_ids = list(self.documents.keys())
             
-            for distance, idx in zip(distances[0], indices[0]):
-                if idx >= len(document_ids):
-                    continue
+            # Get all user collections if no specific documents specified
+            if not document_names:
+                all_collections = self.chroma_client.list_collections()
+                user_collections = [
+                    col for col in all_collections 
+                    if col.metadata and col.metadata.get("user_id") == user_id
+                ]
+            else:
+                user_collections = []
+                for doc_name in document_names:
+                    collection_name = self._generate_collection_name(user_id, doc_name)
+                    try:
+                        collection = self.chroma_client.get_collection(name=collection_name)
+                        user_collections.append(collection)
+                    except Exception as e:
+                        logger.warning(f"Collection {collection_name} not found: {str(e)}")
+            
+            # Search each collection
+            for collection in user_collections:
+                try:
+                    search_results = collection.query(
+                        query_embeddings=query_embedding.tolist(),
+                        n_results=min(top_k, 10),
+                        include=["documents", "metadatas", "distances"]
+                    )
                     
-                doc_id = document_ids[idx]
-                document = self.documents[doc_id]
-                
-                # Calculate similarity score (convert L2 distance to similarity)
-                similarity = 1.0 / (1.0 + distance)
-                
-                # Apply similarity threshold
-                if similarity < similarity_threshold:
-                    continue
-                
-                # Apply metadata filtering
-                if filter_metadata:
-                    if not all(
-                        document.metadata.get(key) == value
-                        for key, value in filter_metadata.items()
-                    ):
-                        continue
-                
-                results.append({
-                    "document_id": doc_id,
-                    "content": document.content,
-                    "metadata": document.metadata,
-                    "similarity_score": similarity,
-                    "distance": float(distance)
-                })
-                
-                if len(results) >= top_k:
-                    break
+                    for i in range(len(search_results['documents'][0])):
+                        results.append({
+                            "text": search_results['documents'][0][i],
+                            "metadata": search_results['metadatas'][0][i],
+                            "distance": search_results['distances'][0][i],
+                            "document_name": search_results['metadatas'][0][i].get('document_name', 'Unknown')
+                        })
+                        
+                except Exception as e:
+                    logger.error(f"Error searching collection {collection.name}: {str(e)}")
             
-            return results
+            # Sort by distance (similarity)
+            results.sort(key=lambda x: x['distance'])
+            
+            return results[:top_k]
             
         except Exception as e:
-            logger.error(f"Query error: {e}")
-            raise
+            logger.error(f"Error searching documents: {str(e)}")
+            return []
     
-    async def get_context_for_query(self, 
-                                   query: str, 
-                                   max_context_length: int = 2000) -> str:
-        """Get formatted context for a query"""
-        
-        results = await self.query(query)
-        
-        if not results:
-            return "No relevant context found."
-        
-        context_parts = []
-        current_length = 0
-        
-        for result in results:
-            content = result["content"]
-            metadata = result.get("metadata", {})
-            
-            # Format context with metadata
-            source_info = ""
-            if "source" in metadata:
-                source_info = f" (Source: {metadata['source']})"
-            elif "parent_doc" in metadata:
-                source_info = f" (Document: {metadata['parent_doc']})"
-            
-            formatted_content = f"{content}{source_info}"
-            
-            if current_length + len(formatted_content) > max_context_length:
-                break
-            
-            context_parts.append(formatted_content)
-            current_length += len(formatted_content)
-        
-        return "\n\n".join(context_parts)
-    
-    async def save_document_to_db(self, doc_id: str, content: str, metadata: Dict[str, Any]):
-        """Save document metadata to database"""
-        conn = sqlite3.connect(str(self.db_path))
+    async def get_user_documents(self, user_id: int) -> List[Dict[str, Any]]:
+        """Get all documents for a user"""
         try:
-            content_hash = hashlib.md5(content.encode()).hexdigest()
-            conn.execute("""
-                INSERT OR REPLACE INTO documents 
-                (id, content, metadata, timestamp, content_hash)
-                VALUES (?, ?, ?, ?, ?)
-            """, (doc_id, content[:1000], json.dumps(metadata), 
-                 datetime.now().isoformat(), content_hash))
-            conn.commit()
-        finally:
-            conn.close()
-    
-    async def load_from_disk(self):
-        """Load existing documents and index from disk"""
-        try:
-            # Load documents from database
-            conn = sqlite3.connect(str(self.db_path))
-            cursor = conn.execute("SELECT id, content, metadata FROM documents")
+            all_collections = self.chroma_client.list_collections()
+            user_docs = []
             
-            for row in cursor.fetchall():
-                doc_id, content, metadata_json = row
-                metadata = json.loads(metadata_json) if metadata_json else {}
-                
-                # For now, just store basic info - full content would need separate storage
-                document = Document(
-                    id=doc_id,
-                    content=content,
-                    metadata=metadata,
-                    timestamp=datetime.now()
-                )
-                self.documents[doc_id] = document
+            for collection in all_collections:
+                if collection.metadata and collection.metadata.get("user_id") == user_id:
+                    doc_info = {
+                        "collection_name": collection.name,
+                        "document_name": collection.metadata.get("document_name", "Unknown"),
+                        "chunk_count": collection.count()
+                    }
+                    user_docs.append(doc_info)
             
-            conn.close()
-            
-            # Load FAISS index if it exists
-            index_path = self.storage_path / "faiss_index.bin"
-            if index_path.exists():
-                self.index = faiss.read_index(str(index_path))
-                logger.info(f"Loaded existing FAISS index with {self.index.ntotal} vectors")
+            return user_docs
             
         except Exception as e:
-            logger.warning(f"Could not load existing data: {e}")
+            logger.error(f"Error getting user documents: {str(e)}")
+            return []
     
-    async def save_to_disk(self):
-        """Save index and documents to disk"""
+    async def delete_document(self, user_id: int, document_name: str) -> bool:
+        """Delete a document from the vector database"""
         try:
-            if self.index:
-                index_path = self.storage_path / "faiss_index.bin"
-                faiss.write_index(self.index, str(index_path))
-                logger.info("Saved FAISS index to disk")
-                
-        except Exception as e:
-            logger.error(f"Error saving to disk: {e}")
-    
-    async def delete_document(self, doc_id: str) -> bool:
-        """Delete a document and its chunks"""
-        try:
-            # Find all chunks for this document
-            chunk_ids = [
-                cid for cid, doc in self.documents.items()
-                if doc.metadata.get("parent_doc") == doc_id or cid == doc_id
-            ]
+            collection_name = self._generate_collection_name(user_id, document_name)
+            self.chroma_client.delete_collection(name=collection_name)
             
-            # Remove from memory
-            for chunk_id in chunk_ids:
-                if chunk_id in self.documents:
-                    del self.documents[chunk_id]
+            if collection_name in self.collections:
+                del self.collections[collection_name]
             
-            # Remove from database
-            conn = sqlite3.connect(str(self.db_path))
-            conn.execute("DELETE FROM documents WHERE id = ?", (doc_id,))
-            conn.commit()
-            conn.close()
-            
-            # Rebuild index
-            self.document_embeddings = [
-                doc.embedding for doc in self.documents.values() 
-                if doc.embedding is not None
-            ]
-            await self.rebuild_index()
-            
-            logger.info(f"Deleted document {doc_id} and {len(chunk_ids)} chunks")
             return True
             
         except Exception as e:
-            logger.error(f"Error deleting document {doc_id}: {e}")
+            logger.error(f"Error deleting document {document_name}: {str(e)}")
             return False
     
-    def get_stats(self) -> Dict[str, Any]:
-        """Get RAG system statistics"""
-        return {
-            "total_documents": len(set(
-                doc.metadata.get("parent_doc", doc.id) 
-                for doc in self.documents.values()
-            )),
-            "total_chunks": len(self.documents),
-            "index_size": self.index.ntotal if self.index else 0,
-            "embedding_dimension": self.embedding_model.get_sentence_embedding_dimension() if self.embedding_model else 0,
-            "storage_path": str(self.storage_path),
-            "config": {
-                "chunk_size": self.config.chunk_size,
-                "chunk_overlap": self.config.chunk_overlap,
-                "similarity_threshold": self.config.similarity_threshold,
-                "max_results": self.config.max_results
+    async def generate_rag_response(self, 
+                                  query: str, 
+                                  user_id: int,
+                                  llm_service,
+                                  document_names: Optional[List[str]] = None,
+                                  model_config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Generate response using RAG"""
+        try:
+            # Search for relevant documents
+            search_results = await self.search_documents(
+                query, user_id, document_names, top_k=3
+            )
+            
+            if not search_results:
+                return {
+                    "response": "I couldn't find any relevant information in your documents to answer this question.",
+                    "sources": [],
+                    "model_used": "rag",
+                    "processing_time": 0,
+                    "token_count": 0
+                }
+            
+            # Build context from search results
+            context_parts = []
+            sources = []
+            
+            for result in search_results:
+                context_parts.append(f"Document: {result['document_name']}\nContent: {result['text']}")
+                sources.append({
+                    "document": result['document_name'],
+                    "chunk_id": result['metadata'].get('chunk_id', 'unknown'),
+                    "similarity": 1 - result['distance']  # Convert distance to similarity
+                })
+            
+            context = "\n\n---\n\n".join(context_parts)
+            
+            # Build RAG prompt
+            rag_prompt = f"""Based on the following context from the user's documents, please answer the question.
+
+Context:
+{context}
+
+Question: {query}
+
+Answer based on the provided context. If the context doesn't contain enough information to answer the question, please say so.
+
+Answer:"""
+            
+            # Generate response using LLM
+            if model_config is None:
+                model_config = {}
+            
+            llm_response = await llm_service.generate_response(
+                rag_prompt, 
+                model_type="chat",
+                **model_config
+            )
+            
+            # Combine with RAG metadata
+            return {
+                "response": llm_response["response"],
+                "sources": sources,
+                "model_used": llm_response["model_used"],
+                "processing_time": llm_response["processing_time"],
+                "token_count": llm_response["token_count"],
+                "context_used": len(search_results)
             }
-        }
-    
-    async def cleanup(self):
-        """Cleanup resources"""
-        logger.info("Cleaning up RAG engine...")
-        await self.save_to_disk()
-        self.embedding_model = None
-        self.index = None
-        self.documents.clear()
-        self.document_embeddings.clear()
+            
+        except Exception as e:
+            logger.error(f"Error generating RAG response: {str(e)}")
+            return {
+                "response": f"I encountered an error while processing your question: {str(e)}",
+                "sources": [],
+                "model_used": "error",
+                "processing_time": 0,
+                "token_count": 0
+            }
+
+# Global RAG engine instance
+rag_engine = RAGEngine()

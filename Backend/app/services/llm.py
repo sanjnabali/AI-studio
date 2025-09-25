@@ -1,301 +1,266 @@
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
-import time
-import logging
-from typing import List, Dict, Optional, Any
-from peft import PeftModel, LoraConfig, get_peft_model, TaskType
+# Backend/app/services/llm.py
 import asyncio
-from dataclasses import dataclass
+import time
+from typing import Dict, Any, List, Optional, AsyncGenerator
+from transformers import (
+    AutoTokenizer, AutoModelForCausalLM, AutoModelForSeq2SeqLM,
+    pipeline, BertTokenizer, BertForSequenceClassification
+)
+import torch
+from config.settings import settings
+import logging
+from abc import ABC, abstractmethod
 
 logger = logging.getLogger(__name__)
 
-@dataclass
-class GenerationConfig:
-    max_new_tokens: int = 200
-    temperature: float = 0.7
-    top_p: float = 0.9
-    top_k: int = 50
-    repetition_penalty: float = 1.1
-    do_sample: bool = True
-
-class LocalLLMService:
-    """Enhanced local LLM service with fine-tuning support"""
-    
-    def __init__(self, model_name: str = "microsoft/phi-2"):
+class BaseModel(ABC):
+    def __init__(self, model_name: str, device: str = "auto"):
         self.model_name = model_name
+        self.device = self._get_device(device)
         self.model = None
         self.tokenizer = None
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.fine_tuned_adapters = {}
+        self.pipeline = None
         
-        # Domain-specific system prompts
-        self.domain_prompts = {
-            "general": "You are a helpful AI assistant that provides accurate and concise responses.",
-            "code": """You are an expert programmer with deep knowledge of multiple programming languages. 
-Provide clean, efficient, and well-documented code. Always include explanations and best practices.""",
-            "creative": """You are a creative writer with expertise in storytelling, poetry, and creative content. 
-Write engaging, imaginative, and well-structured content.""",
-            "analysis": """You are a data analyst and researcher. Provide clear, structured analysis with 
-actionable insights. Use logical reasoning and evidence-based conclusions.""",
-            "summarizer": """You are an expert at summarization. Create concise, accurate summaries that 
-capture the key points and essential information.""",
-            "marketing": """You are a marketing expert with knowledge of copywriting, branding, and 
-customer engagement. Create compelling, persuasive content that resonates with target audiences."""
-        }
+    def _get_device(self, device: str) -> str:
+        if device == "auto":
+            return "cuda" if torch.cuda.is_available() else "cpu"
+        return device
     
-    async def initialize(self):
-        """Load tokenizer and model asynchronously"""
-        if self.initialized:
-            return
-        logger.info(f"Initializing model '{self.model_name}' on {self.device}...")
+    @abstractmethod
+    async def load_model(self):
+        pass
+    
+    @abstractmethod
+    async def generate(self, prompt: str, **kwargs) -> str:
+        pass
 
+class ChatModel(BaseModel):
+    async def load_model(self):
         try:
-            # Tokenizer
-            self.tokenizer = AutoTokenizer.from_pretrained(
-                self.model_name, trust_remote_code=True
-            )
-            if self.tokenizer.pad_token is None:
-                self.tokenizer.pad_token = self.tokenizer.eos_token
-
-            # Quantization for GPU
-            quantization_config = None
-            if self.device == "cuda":
-                quantization_config = BitsAndBytesConfig(
-                    load_in_4bit=True,
-                    bnb_4bit_use_double_quant=True,
-                    bnb_4bit_quant_type="nf4",
-                    bnb_4bit_compute_dtype=torch.bfloat16
-                )
-
-            # Load model
+            logger.info(f"Loading chat model: {self.model_name}")
+            self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
             self.model = AutoModelForCausalLM.from_pretrained(
                 self.model_name,
-                device_map="auto" if self.device == "cuda" else None,
                 torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
-                quantization_config=quantization_config,
+                device_map="auto" if self.device == "cuda" else None,
                 trust_remote_code=True
             )
-            self.initialized = True
-            logger.info(f"Model loaded successfully on {self.device}.")
-
+            
+            # Add pad token if missing
+            if self.tokenizer.pad_token is None:
+                self.tokenizer.pad_token = self.tokenizer.eos_token
+                
+            logger.info(f"Chat model loaded successfully on {self.device}")
+            
         except Exception as e:
-            logger.error(f"Failed to initialize model: {e}")
+            logger.error(f"Error loading chat model: {str(e)}")
+            # Fallback to a smaller model
+            self.model_name = "microsoft/DialoGPT-small"
+            await self._load_fallback_model()
+    
+    async def _load_fallback_model(self):
+        try:
+            self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+            self.model = AutoModelForCausalLM.from_pretrained(self.model_name)
+            if self.tokenizer.pad_token is None:
+                self.tokenizer.pad_token = self.tokenizer.eos_token
+        except Exception as e:
+            logger.error(f"Fallback model loading failed: {str(e)}")
             raise
     
-    def prepare_prompt(self, messages: List[Dict], domain: str = "general") -> str:
-        """Prepare formatted prompt from messages"""
-        system_prompt = self.domain_prompts.get(domain, self.domain_prompts["general"])
-        
-        # Build conversation history
-        prompt_parts = [f"System: {system_prompt}"]
-        
-        for message in messages:
-            role = message.get("role", "user")
-            content = message.get("content", "")
-            
-            if role == "system":
-                continue  # Already added system prompt
-            elif role == "user":
-                prompt_parts.append(f"User: {content}")
-            elif role == "assistant":
-                prompt_parts.append(f"Assistant: {content}")
-        
-        prompt_parts.append("Assistant:")
-        return "\n\n".join(prompt_parts)
-    
-    async def chat(self, 
-                   messages: List[Dict], 
-                   temperature: float = 0.7,
-                   top_k: int = 50,
-                   top_p: float = 0.9,
-                   domain: str = "general",
-                   max_tokens: int = 200,
-                   adapter_name: Optional[str] = None) -> tuple[str, float]:
-        """Generate chat response with fine-tuning support"""
-        
-        if not self.model or not self.tokenizer:
-            raise ValueError("Model not initialized. Call initialize() first.")
-        
+    async def generate(self, prompt: str, **kwargs) -> str:
         try:
-            start_time = time.time()
+            # Default parameters
+            temperature = kwargs.get('temperature', 0.7)
+            max_tokens = kwargs.get('max_tokens', 1000)
+            top_p = kwargs.get('top_p', 0.9)
+            top_k = kwargs.get('top_k', 50)
             
-            # Switch to fine-tuned adapter if specified
-            current_model = self.model
-            if adapter_name and adapter_name in self.fine_tuned_adapters:
-                logger.info(f"Using fine-tuned adapter: {adapter_name}")
-                current_model = self.fine_tuned_adapters[adapter_name]
-            
-            # Prepare prompt
-            prompt = self.prepare_prompt(messages, domain)
-            
-            # Tokenize
-            inputs = self.tokenizer(
-                prompt, 
-                return_tensors="pt", 
-                truncate=True, 
-                max_length=1024
-            )
-            
+            # Encode input
+            inputs = self.tokenizer.encode(prompt, return_tensors="pt")
             if self.device == "cuda":
-                inputs = {k: v.to(self.device) for k, v in inputs.items()}
+                inputs = inputs.cuda()
             
-            # Generate
-            generation_config = GenerationConfig(
-                max_new_tokens=max_tokens,
-                temperature=temperature,
-                top_p=top_p,
-                top_k=top_k
-            )
-            
+            # Generate response
             with torch.no_grad():
-                outputs = current_model.generate(
-                    **inputs,
-                    max_new_tokens=generation_config.max_new_tokens,
-                    temperature=generation_config.temperature,
-                    top_p=generation_config.top_p,
-                    top_k=generation_config.top_k,
-                    repetition_penalty=generation_config.repetition_penalty,
-                    do_sample=generation_config.do_sample,
+                outputs = self.model.generate(
+                    inputs,
+                    max_new_tokens=max_tokens,
+                    temperature=temperature,
+                    top_p=top_p,
+                    top_k=top_k,
+                    do_sample=True,
                     pad_token_id=self.tokenizer.eos_token_id,
-                    eos_token_id=self.tokenizer.eos_token_id
+                    no_repeat_ngram_size=2
                 )
             
             # Decode response
-            response_text = self.tokenizer.decode(
-                outputs[0][inputs["input_ids"].shape[-1]:],
-                skip_special_tokens=True
-            ).strip()
+            response = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
             
-            latency = (time.time() - start_time) * 1000
+            # Remove input prompt from response
+            if prompt in response:
+                response = response.replace(prompt, "").strip()
             
-            return response_text, latency
+            return response if response else "I apologize, but I couldn't generate a proper response. Please try rephrasing your question."
             
         except Exception as e:
-            logger.error(f"Chat generation error: {e}")
-            raise
+            logger.error(f"Error generating response: {str(e)}")
+            return f"I encountered an error while processing your request. Please try again."
+
+class CodeModel(BaseModel):
+    async def load_model(self):
+        try:
+            logger.info(f"Loading code model: {self.model_name}")
+            self.pipeline = pipeline(
+                "text-generation",
+                model=self.model_name,
+                tokenizer=self.model_name,
+                torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
+                device=0 if self.device == "cuda" else -1
+            )
+            logger.info("Code model loaded successfully")
+        except Exception as e:
+            logger.error(f"Error loading code model: {str(e)}")
+            # Fallback to a code generation model
+            self.model_name = "microsoft/CodeGPT-small-py"
+            self.pipeline = pipeline("text-generation", model=self.model_name, device=-1)
     
-    async def fine_tune_lora(self, 
-                           training_data: List[Dict],
-                           adapter_name: str,
-                           lora_config: Optional[Dict] = None) -> Dict[str, Any]:
-        """Fine-tune the model using LoRA"""
+    async def generate(self, prompt: str, **kwargs) -> str:
+        try:
+            max_tokens = kwargs.get('max_tokens', 500)
+            temperature = kwargs.get('temperature', 0.3)  # Lower temp for code
+            
+            result = self.pipeline(
+                prompt,
+                max_length=len(prompt.split()) + max_tokens,
+                temperature=temperature,
+                do_sample=True,
+                num_return_sequences=1
+            )
+            
+            generated_text = result[0]['generated_text']
+            # Remove the input prompt
+            if prompt in generated_text:
+                generated_text = generated_text.replace(prompt, "").strip()
+            
+            return generated_text
+            
+        except Exception as e:
+            logger.error(f"Error generating code: {str(e)}")
+            return f"# Error generating code: {str(e)}"
+
+class SummarizerModel(BaseModel):
+    async def load_model(self):
+        try:
+            logger.info(f"Loading summarizer model: {self.model_name}")
+            self.pipeline = pipeline(
+                "summarization",
+                model=self.model_name,
+                tokenizer=self.model_name,
+                device=0 if self.device == "cuda" else -1
+            )
+            logger.info("Summarizer model loaded successfully")
+        except Exception as e:
+            logger.error(f"Error loading summarizer: {str(e)}")
+            # Fallback to a smaller summarizer
+            self.model_name = "sshleifer/distilbart-cnn-12-6"
+            self.pipeline = pipeline("summarization", model=self.model_name, device=-1)
+    
+    async def generate(self, prompt: str, **kwargs) -> str:
+        try:
+            max_length = kwargs.get('max_tokens', 150)
+            min_length = kwargs.get('min_tokens', 50)
+            
+            result = self.pipeline(
+                prompt,
+                max_length=max_length,
+                min_length=min_length,
+                do_sample=False
+            )
+            
+            return result[0]['summary_text']
+            
+        except Exception as e:
+            logger.error(f"Error generating summary: {str(e)}")
+            return f"Error generating summary: {str(e)}"
+
+class LLMService:
+    def __init__(self):
+        self.models: Dict[str, BaseModel] = {}
+        self.model_configs = {
+            "chat": ChatModel("microsoft/DialoGPT-medium"),
+            "code": CodeModel("microsoft/CodeBERT-base"),
+            "summarizer": SummarizerModel("facebook/bart-large-cnn")
+        }
+        self._loading_lock = asyncio.Lock()
+    
+    async def get_model(self, model_type: str) -> BaseModel:
+        if model_type not in self.models:
+            async with self._loading_lock:
+                if model_type not in self.models:
+                    model = self.model_configs.get(model_type)
+                    if not model:
+                        raise ValueError(f"Unsupported model type: {model_type}")
+                    
+                    await model.load_model()
+                    self.models[model_type] = model
         
-        if not self.model or not self.tokenizer:
-            raise ValueError("Base model not loaded")
-        
-        logger.info(f"Starting LoRA fine-tuning for adapter: {adapter_name}")
+        return self.models[model_type]
+    
+    async def generate_response(self, 
+                              prompt: str, 
+                              model_type: str = "chat", 
+                              **kwargs) -> Dict[str, Any]:
+        start_time = time.time()
         
         try:
-            # Default LoRA configuration
-            if lora_config is None:
-                lora_config = {
-                    "r": 16,
-                    "lora_alpha": 32,
-                    "lora_dropout": 0.1,
-                    "bias": "none",
-                    "task_type": TaskType.CAUSAL_LM,
-                    "target_modules": ["q_proj", "v_proj", "k_proj", "o_proj"]
-                }
+            model = await self.get_model(model_type)
+            response = await model.generate(prompt, **kwargs)
             
-            # Create LoRA model
-            peft_config = LoraConfig(**lora_config)
-            peft_model = get_peft_model(self.model, peft_config)
+            processing_time = time.time() - start_time
             
-            # Prepare training data
-            train_texts = []
-            for item in training_data:
-                if isinstance(item, dict):
-                    # Format as conversation
-                    messages = item.get("messages", [])
-                    domain = item.get("domain", "general")
-                    text = self.prepare_prompt(messages, domain)
-                    train_texts.append(text)
-                else:
-                    train_texts.append(str(item))
-            
-            # Simple training loop (in production, use proper training framework)
-            peft_model.train()
-            optimizer = torch.optim.AdamW(peft_model.parameters(), lr=1e-4)
-            
-            total_loss = 0
-            num_batches = 0
-            
-            for text in train_texts:
-                # Tokenize
-                inputs = self.tokenizer(
-                    text,
-                    return_tensors="pt",
-                    truncate=True,
-                    max_length=512,
-                    padding=True
-                )
-                
-                if self.device == "cuda":
-                    inputs = {k: v.to(self.device) for k, v in inputs.items()}
-                
-                # Forward pass
-                outputs = peft_model(**inputs, labels=inputs["input_ids"])
-                loss = outputs.loss
-                
-                # Backward pass
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
-                
-                total_loss += loss.item()
-                num_batches += 1
-            
-            # Save the fine-tuned adapter
-            self.fine_tuned_adapters[adapter_name] = peft_model
-            
-            avg_loss = total_loss / num_batches if num_batches > 0 else 0
-            
-            logger.info(f"LoRA fine-tuning completed. Average loss: {avg_loss:.4f}")
+            # Estimate token count (rough approximation)
+            token_count = len(response.split()) * 1.3
             
             return {
-                "adapter_name": adapter_name,
-                "status": "completed",
-                "average_loss": avg_loss,
-                "num_examples": len(training_data),
-                "lora_config": lora_config
+                "response": response,
+                "model_used": model.model_name,
+                "processing_time": processing_time,
+                "token_count": int(token_count)
             }
             
         except Exception as e:
-            logger.error(f"Fine-tuning error: {e}")
-            raise
+            logger.error(f"Error in generate_response: {str(e)}")
+            return {
+                "response": f"I apologize, but I encountered an error: {str(e)}",
+                "model_used": "error",
+                "processing_time": time.time() - start_time,
+                "token_count": 0
+            }
     
-    def get_available_adapters(self) -> List[str]:
-        """Get list of available fine-tuned adapters"""
-        return list(self.fine_tuned_adapters.keys())
-    
-    def get_model_info(self) -> Dict[str, Any]:
-        """Get model information"""
-        if not self.model:
-            return {"status": "not_loaded"}
+    async def chat_completion(self, 
+                            messages: List[Dict[str, str]], 
+                            model_config: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Process a chat completion request with conversation history
+        """
+        # Build conversation context
+        conversation = ""
+        for msg in messages[-10:]:  # Keep last 10 messages for context
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+            if role == "user":
+                conversation += f"User: {content}\n"
+            elif role == "assistant":
+                conversation += f"Assistant: {content}\n"
         
-        return {
-            "status": "loaded",
-            "model_name": self.model_name,
-            "device": self.device,
-            "parameters": sum(p.numel() for p in self.model.parameters()),
-            "available_adapters": self.get_available_adapters(),
-            "supported_domains": list(self.domain_prompts.keys()),
-            "memory_usage": {
-                "allocated_mb": torch.cuda.memory_allocated() / 1024**2 if torch.cuda.is_available() else 0,
-                "reserved_mb": torch.cuda.memory_reserved() / 1024**2 if torch.cuda.is_available() else 0
-            } if torch.cuda.is_available() else {}
-        }
-    
-    async def cleanup(self):
-        """Clean up resources"""
-        logger.info("Cleaning up LLM service...")
+        conversation += "Assistant: "
         
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-        
-        self.model = None
-        self.tokenizer = None
-        self.fine_tuned_adapters.clear()
+        return await self.generate_response(
+            conversation,
+            model_type="chat",
+            **model_config
+        )
 
-# Global instance
-llm_service = LocalLLMService()
+# Global service instance
+llm_service = LLMService()

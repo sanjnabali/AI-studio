@@ -1,90 +1,92 @@
-from pydantic import BaseModel, Field, EmailStr, validator
-from typing import Optional
+# Backend/app/models/user.py
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, JSON
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.sql import func
 from datetime import datetime
-import uuid
+from typing import Optional, Dict, Any
 
-class User(BaseModel):
-    """User model for authentication"""
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    email: EmailStr
-    name: str
-    hashed_password: str
-    is_active: bool = True
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+Base = declarative_base()
 
-    @validator('name')
-    def name_must_not_be_empty(cls, v):
-        if not v or not v.strip():
-            raise ValueError('Name cannot be empty')
-        return v.strip()
+class User(Base):
+    __tablename__ = "users"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String(255), unique=True, index=True, nullable=False)
+    username = Column(String(100), unique=True, index=True, nullable=False)
+    hashed_password = Column(String(255), nullable=False)
+    full_name = Column(String(255))
+    is_active = Column(Boolean, default=True)
+    is_verified = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    last_login = Column(DateTime)
+    
+    # AI Studio specific fields
+    api_key = Column(String(255), unique=True)
+    model_preferences = Column(JSON, default=lambda: {
+        "default_model": "microsoft/DialoGPT-medium",
+        "temperature": 0.7,
+        "max_tokens": 1000,
+        "top_p": 0.9,
+        "top_k": 50
+    })
+    usage_stats = Column(JSON, default=lambda: {
+        "total_requests": 0,
+        "total_tokens": 0,
+        "last_request": None
+    })
 
-    @validator('email')
-    def email_must_be_valid(cls, v):
-        if not v or '@' not in v:
-            raise ValueError('Invalid email format')
-        return v.lower()
+class ChatSession(Base):
+    __tablename__ = "chat_sessions"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, index=True, nullable=False)
+    session_name = Column(String(255), default="New Chat")
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    model_config = Column(JSON, default=lambda: {})
+    is_archived = Column(Boolean, default=False)
 
-    class Config:
-        schema_extra = {
-            "example": {
-                "id": "123e4567-e89b-12d3-a456-426614174000",
-                "email": "user@example.com",
-                "name": "John Doe",
-                "is_active": True,
-                "created_at": "2023-01-01T00:00:00Z",
-                "updated_at": "2023-01-01T00:00:00Z"
-            }
-        }
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
 
-from pydantic import BaseModel, Field, EmailStr, validator, root_validator
-from typing import Optional
-from datetime import datetime
-import uuid
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(Integer, index=True, nullable=False)
+    user_id = Column(Integer, index=True, nullable=False)
+    role = Column(String(50), nullable=False)  # user, assistant, system
+    content = Column(Text, nullable=False)
+    message_type = Column(String(50), default="text")  # text, code, image, audio
+    message_metadata = Column(JSON, default=lambda: {})
+    created_at = Column(DateTime, default=func.now())
+    token_count = Column(Integer, default=0)
 
-class UserCreate(BaseModel):
-    """User creation request model"""
-    email: EmailStr
-    name: str
-    password: str = Field(..., min_length=6)
-    confirmPassword: Optional[str] = Field(None, alias="confirm_password")
+class Document(Base):
+    __tablename__ = "documents"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, index=True, nullable=False)
+    filename = Column(String(255), nullable=False)
+    original_filename = Column(String(255), nullable=False)
+    file_path = Column(String(500), nullable=False)
+    file_size = Column(Integer, nullable=False)
+    file_type = Column(String(100), nullable=False)
+    processed = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=func.now())
+    chunk_count = Column(Integer, default=0)
+    embedding_model = Column(String(255))
 
-    @validator('password')
-    def password_strength(cls, v):
-        if len(v) < 6:
-            raise ValueError('Password must be at least 6 characters long')
-        return v
+class CodeExecution(Base):
+    __tablename__ = "code_executions"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, index=True, nullable=False)
+    session_id = Column(Integer, index=True)
+    language = Column(String(50), nullable=False)
+    code = Column(Text, nullable=False)
+    output = Column(Text)
+    error = Column(Text)
+    execution_time = Column(Integer)  # milliseconds
+    created_at = Column(DateTime, default=func.now())
+    status = Column(String(50), default="pending")  # pending, success, error
 
-    from pydantic import model_validator
 
-    @model_validator(mode='before')
-    def passwords_match(cls, values):
-        password = values.get('password')
-        confirm_password = values.get('confirmPassword')
-        if password and confirm_password and password != confirm_password:
-            raise ValueError('Passwords do not match')
-        return values
-
-class UserLogin(BaseModel):
-    """User login request model"""
-    email: EmailStr
-    password: str
-
-class Token(BaseModel):
-    """Token response model"""
-    access_token: str
-    refresh_token: str
-    token_type: str = "bearer"
-
-class TokenData(BaseModel):
-    """Token payload data"""
-    user_id: Optional[str] = None
-    email: Optional[str] = None
-
-class RefreshTokenRequest(BaseModel):
-    """Refresh token request model"""
-    refresh_token: str
-
-# In-memory user storage (replace with database in production)
-users_db: dict[str, User] = {}
-email_to_id: dict[str, str] = {}

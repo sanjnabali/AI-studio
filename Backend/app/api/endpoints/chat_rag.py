@@ -1,180 +1,262 @@
-from fastapi import APIRouter, HTTPException, UploadFile, File
-from typing import List, Optional
-from ...models.chat import ChatRequest, ChatResponse
-from ...services.llm import llm_service
-from ...services.rag_engine import RAGEngine, RAGConfig
+# Backend/app/api/endpoints/chat_rag.py
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from sqlalchemy.orm import Session
+from pydantic import BaseModel
+from typing import List, Optional, Dict, Any
 import logging
-import json
+import os
+import uuid
+
+from app.models.user import User, Document
+from app.services.rag_engine import rag_engine
+from app.services.llm import llm_service
+from app.api.deps import get_current_user
+from app.core.database import get_db
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# Global RAG engine
-rag_engine = RAGEngine()
+class RAGRequest(BaseModel):
+    query: str
+    document_names: Optional[List[str]] = None
+    model_config: Optional[Dict[str, Any]] = {}
+    session_id: Optional[int] = None
 
-@router.on_event("startup")
-async def initialize_rag():
-    """Initialize RAG engine on startup"""
-    try:
-        await rag_engine.initialize()
-        logger.info("RAG engine initialized")
-    except Exception as e:
-        logger.error(f"Failed to initialize RAG engine: {e}")
+class RAGResponse(BaseModel):
+    response: str
+    sources: List[Dict[str, Any]]
+    model_used: str
+    processing_time: float
+    token_count: int
+    context_used: int
 
-@router.post("/", response_model=ChatResponse)
-async def chat_rag(request: ChatRequest):
-    """RAG-enhanced chat endpoint"""
+class DocumentInfo(BaseModel):
+    id: int
+    filename: str
+    original_filename: str
+    file_size: int
+    file_type: str
+    processed: bool
+    created_at: str
+    chunk_count: int
+
+@router.post("/upload", response_model=Dict[str, Any])
+async def upload_document(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Upload and process a document for RAG"""
     try:
-        # Initialize services if needed
-        if not llm_service.model:
-            await llm_service.initialize()
-        
-        # Get the user's last message for context retrieval
-        user_messages = [msg for msg in request.messages if msg.role == "user"]
-        if not user_messages:
-            raise HTTPException(status_code=400, detail="No user message found")
-        
-        last_user_message = user_messages[-1].content
-        
-        # Retrieve relevant context
-        try:
-            context = await rag_engine.get_context_for_query(
-                last_user_message,
-                max_context_length=1500
+        # Validate file
+        if not file.filename:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No file provided"
             )
-            citations = await rag_engine.query(last_user_message, top_k=3)
-            citation_list = [f"{i+1}. {cite['metadata'].get('source', 'Unknown')}" 
-                           for i, cite in enumerate(citations)]
-        except Exception as e:
-            logger.warning(f"RAG retrieval failed: {e}")
-            context = ""
-            citation_list = []
         
-        # Enhance messages with context
-        enhanced_messages = []
-        for msg in request.messages[:-1]:  # All messages except the last
-            enhanced_messages.append(msg.dict())
+        # Check file size
+        file_content = await file.read()
+        if len(file_content) > settings.MAX_FILE_SIZE:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"File size exceeds {settings.MAX_FILE_SIZE} bytes"
+            )
         
-        # Add context to the last user message
-        if context:
-            enhanced_content = f"Context:\n{context}\n\nQuestion: {last_user_message}"
-        else:
-            enhanced_content = last_user_message
-            
-        enhanced_messages.append({
-            "role": "user",
-            "content": enhanced_content
-        })
+        # Check file type
+        allowed_extensions = ['.pdf', '.docx', '.txt']
+        file_ext = os.path.splitext(file.filename)[1].lower()
+        if file_ext not in allowed_extensions:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"File type {file_ext} not supported. Allowed: {allowed_extensions}"
+            )
         
-        # Generate response
-        output, latency = await llm_service.chat(
-            messages=enhanced_messages,
-            temperature=request.temperature or 0.7,
-            top_k=request.top_k or 50,
-            top_p=request.top_p or 0.9,
-            domain=request.domain or "analysis",
-            max_tokens=300
+        # Create upload directory
+        upload_dir = os.path.join(settings.UPLOAD_FOLDER, str(current_user.id))
+        os.makedirs(upload_dir, exist_ok=True)
+        
+        # Generate unique filename
+        unique_filename = f"{uuid.uuid4().hex}_{file.filename}"
+        file_path = os.path.join(upload_dir, unique_filename)
+        
+        # Save file
+        with open(file_path, 'wb') as f:
+            f.write(file_content)
+        
+        # Create document record
+        document = Document(
+            user_id=current_user.id,
+            filename=unique_filename,
+            original_filename=file.filename,
+            file_path=file_path,
+            file_size=len(file_content),
+            file_type=file_ext,
+            processed=False
         )
         
-        return ChatResponse(
-            output=output,
-            latency_ms=latency,
-            citations=citation_list if citation_list else None
+        db.add(document)
+        db.commit()
+        db.refresh(document)
+        
+        # Process document with RAG engine
+        processing_result = await rag_engine.process_document(
+            file_path, 
+            current_user.id, 
+            file.filename
         )
         
-    except Exception as e:
-        logger.error(f"RAG chat error: {e}")
-        raise HTTPException(status_code=500, detail=f"RAG chat error: {str(e)}")
-
-@router.post("/upload-documents")
-async def upload_documents(files: List[UploadFile] = File(...)):
-    """Upload and index documents for RAG"""
-    try:
-        results = []
-        
-        for file in files:
-            # Read file content
-            content = await file.read()
+        if processing_result["status"] == "success":
+            document.processed = True
+            document.chunk_count = processing_result["chunks_processed"]
+            document.embedding_model = settings.EMBEDDING_MODEL
+            db.commit()
             
-            # Handle different file types
-            if file.filename.endswith('.txt'):
-                text_content = content.decode('utf-8')
-            elif file.filename.endswith('.json'):
-                json_data = json.loads(content.decode('utf-8'))
-                text_content = json.dumps(json_data, indent=2)
-            else:
-                # For other types, try to decode as text
-                try:
-                    text_content = content.decode('utf-8')
-                except:
-                    logger.warning(f"Could not decode file {file.filename}, skipping")
-                    continue
+            logger.info(f"Document processed successfully: {file.filename}")
             
-            # Add to RAG engine
-            metadata = {
-                "source": file.filename,
-                "file_type": file.content_type,
-                "file_size": len(content)
-            }
-            
-            doc_id = await rag_engine.add_document(
-                content=text_content,
-                metadata=metadata
-            )
-            
-            results.append({
+            return {
+                "status": "success",
+                "document_id": document.id,
                 "filename": file.filename,
-                "document_id": doc_id,
-                "status": "indexed",
-                "size": len(content)
-            })
-        
-        return {
-            "message": f"Successfully indexed {len(results)} documents",
-            "documents": results,
-            "rag_stats": rag_engine.get_stats()
-        }
-        
-    except Exception as e:
-        logger.error(f"Document upload error: {e}")
-        raise HTTPException(status_code=500, detail=f"Upload error: {str(e)}")
-
-@router.get("/documents")
-async def list_documents():
-    """List all indexed documents"""
-    try:
-        stats = rag_engine.get_stats()
-        return {
-            "stats": stats,
-            "documents": list(rag_engine.documents.keys())[:50]  # Limit for performance
-        }
-    except Exception as e:
-        logger.error(f"Error listing documents: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.delete("/documents/{doc_id}")
-async def delete_document(doc_id: str):
-    """Delete a document from the index"""
-    try:
-        success = await rag_engine.delete_document(doc_id)
-        if success:
-            return {"message": f"Document {doc_id} deleted successfully"}
+                "chunks_processed": processing_result["chunks_processed"],
+                "message": "Document uploaded and processed successfully"
+            }
         else:
-            raise HTTPException(status_code=404, detail="Document not found")
+            # Mark as failed
+            document.processed = False
+            db.commit()
+            
+            # Clean up file
+            if os.path.exists(file_path):
+                os.remove(file_path)
+            
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error processing document: {processing_result['error']}"
+            )
+        
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error deleting document: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        db.rollback()
+        logger.error(f"Error uploading document: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error uploading document: {str(e)}"
+        )
 
-@router.post("/search")
-async def search_documents(query: str, top_k: int = 5):
-    """Search documents directly"""
+@router.get("/documents", response_model=List[DocumentInfo])
+async def get_user_documents(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get all documents for the current user"""
     try:
-        results = await rag_engine.query(query, top_k=top_k)
-        return {
-            "query": query,
-            "results": results,
-            "count": len(results)
-        }
+        documents = db.query(Document).filter(
+            Document.user_id == current_user.id
+        ).order_by(Document.created_at.desc()).all()
+        
+        return [
+            DocumentInfo(
+                id=doc.id,
+                filename=doc.original_filename,
+                original_filename=doc.original_filename,
+                file_size=doc.file_size,
+                file_type=doc.file_type,
+                processed=doc.processed,
+                created_at=doc.created_at.isoformat(),
+                chunk_count=doc.chunk_count or 0
+            )
+            for doc in documents
+        ]
+        
     except Exception as e:
-        logger.error(f"Search error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error getting user documents: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error retrieving documents"
+        )
+
+@router.post("/query", response_model=RAGResponse)
+async def rag_query(
+    request: RAGRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Query documents using RAG"""
+    try:
+        # Merge model config with user preferences
+        model_config = {**current_user.model_preferences, **(request.model_config or {})}
+        
+        # Generate RAG response
+        rag_response = await rag_engine.generate_rag_response(
+            request.query,
+            current_user.id,
+            llm_service,
+            request.document_names,
+            model_config
+        )
+        
+        # Update usage stats
+        current_user.usage_stats["total_requests"] += 1
+        current_user.usage_stats["total_tokens"] += rag_response["token_count"]
+        db.commit()
+        
+        return RAGResponse(
+            response=rag_response["response"],
+            sources=rag_response["sources"],
+            model_used=rag_response["model_used"],
+            processing_time=rag_response["processing_time"],
+            token_count=rag_response["token_count"],
+            context_used=rag_response.get("context_used", 0)
+        )
+        
+    except Exception as e:
+        logger.error(f"Error in RAG query: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error processing RAG query: {str(e)}"
+        )
+
+@router.delete("/documents/{document_id}")
+async def delete_document(
+    document_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Delete a document"""
+    try:
+        document = db.query(Document).filter(
+            Document.id == document_id,
+            Document.user_id == current_user.id
+        ).first()
+        
+        if not document:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Document not found"
+            )
+        
+        # Delete from vector database
+        await rag_engine.delete_document(current_user.id, document.original_filename)
+        
+        # Delete file
+        if os.path.exists(document.file_path):
+            os.remove(document.file_path)
+        
+        # Delete database record
+        db.delete(document)
+        db.commit()
+        
+        return {"message": "Document deleted successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error deleting document: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error deleting document"
+        )
+    

@@ -1,43 +1,65 @@
+// Frontend/src/types/index.ts
 export interface Message {
-  id: string
-  role: 'user' | 'assistant'
+  id: number
+  role: 'user' | 'assistant' | 'system'
   content: string
   timestamp: Date
-  type: 'text' | 'image' | 'audio' | 'code'
-  metadata?: Record<string, any>
+  type: 'text' | 'code' | 'image' | 'audio' | 'file'
+  metadata?: {
+    model_used?: string
+    processing_time?: number
+    token_count?: number
+    sources?: Array<{
+      document: string
+      similarity: number
+    }>
+  }
 }
 
-export interface Chat {
-  id: string
-  title: string
+export interface ChatSession {
+  id: number
+  name: string
   messages: Message[]
-  created: Date
-  updated: Date
-  modelConfig: ModelConfig
+  created_at: Date
+  updated_at: Date
+  model_config: ModelSettings
 }
 
-export interface ModelConfig {
-  model: string
+export interface ModelSettings {
+  model_name: string
   temperature: number
-  topK: number
-  topP: number
-  maxTokens: number
-  safetyLevel: string
+  max_tokens: number
+  top_p: number
+  top_k: number
+  frequency_penalty: number
+  presence_penalty: number
 }
 
-export interface Agent {
-  id: string
+export interface Document {
+  id: number
   name: string
-  description: string
-  type: 'code' | 'text' | 'multimodal' | 'voice'
-  status: 'idle' | 'busy' | 'error'
+  size: number
+  type: string
+  uploaded_at: Date
+  processed: boolean
+  chunk_count: number
 }
 
-export interface Template {
+export interface ExecutionResult {
+  id: number
+  code: string
+  language: string
+  output?: string
+  error?: string
+  execution_time: number
+  status: 'success' | 'error' | 'timeout'
+  timestamp: Date
+}
+
+export interface VoiceRecording {
   id: string
-  name: string
-  description: string
-  category: string
-  prompt: string
-  config: ModelConfig
+  duration: number
+  blob: Blob
+  transcript?: string
+  processing: boolean
 }

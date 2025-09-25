@@ -42,10 +42,10 @@
               
               <button
                 type="submit"
-                :disabled="authStore.isLoading"
+                :disabled="authStore.loading"
                 class="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white rounded-lg transition-colors"
               >
-                {{ authStore.isLoading ? 'Updating...' : 'Update Profile' }}
+                {{ authStore.loading ? 'Updating...' : 'Update Profile' }}
               </button>
             </form>
           </div>
@@ -92,10 +92,10 @@
               
               <button
                 type="submit"
-                :disabled="authStore.isLoading || !canChangePassword"
+                :disabled="authStore.loading || !canChangePassword"
                 class="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white rounded-lg transition-colors"
               >
-                {{ authStore.isLoading ? 'Changing...' : 'Change Password' }}
+                {{ authStore.loading ? 'Changing...' : 'Change Password' }}
               </button>
             </form>
           </div>
@@ -314,7 +314,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../store/auth'
 import { useChatStore } from '../store/chat'
-import Navbar from '../composables/Navbar.vue'
+import Navbar from '../components/Navbar.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()

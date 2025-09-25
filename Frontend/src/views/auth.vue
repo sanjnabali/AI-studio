@@ -16,9 +16,9 @@
       <div class="space-y-1 text-xs text-gray-600 dark:text-gray-400">
         <div>Route: {{ $route.path }}</div>
         <div>Auth: {{ authStore.isAuthenticated ? '✅' : '❌' }}</div>
-        <div>User: {{ authStore.user?.name || 'None' }}</div>
+        <div>User: {{ authStore.user?.username || 'None' }}</div>
         <div>Token: {{ authStore.token ? '✅' : '❌' }}</div>
-        <div>Loading: {{ authStore.isLoading ? '⏳' : '✅' }}</div>
+        <div>Loading: {{ authStore.loading ? '⏳' : '✅' }}</div>
         <div>Initialized: {{ authStore.isInitialized ? '✅' : '❌' }}</div>
       </div>
       <div class="mt-2 space-y-1">

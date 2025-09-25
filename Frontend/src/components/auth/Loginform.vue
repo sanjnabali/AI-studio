@@ -35,7 +35,7 @@
               required
               class="appearance-none relative block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white bg-white dark:bg-gray-800 rounded-lg focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
               placeholder="Enter your email"
-              :disabled="authStore.isLoading"
+              :disabled="authStore.loading"
             />
           </div>
           <div>
@@ -52,7 +52,7 @@
                 required
                 class="appearance-none relative block w-full px-3 py-2 pr-10 border border-gray-300 dark:border-gray-600 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white bg-white dark:bg-gray-800 rounded-lg focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
                 placeholder="Enter your password"
-                :disabled="authStore.isLoading"
+                :disabled="authStore.loading"
               />
               <button
                 type="button"
@@ -101,7 +101,7 @@
         <div v-if="isDev" class="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3 text-xs">
           <div class="font-semibold text-yellow-800 dark:text-yellow-200 mb-2">Debug Info:</div>
           <div class="space-y-1 text-yellow-700 dark:text-yellow-300">
-            <div>Auth Loading: {{ authStore.isLoading }}</div>
+            <div>Auth Loading: {{ authStore.loading }}</div>
             <div>Auth Initialized: {{ authStore.isInitialized }}</div>
             <div>Is Authenticated: {{ authStore.isAuthenticated }}</div>
             <div>Has User: {{ !!authStore.user }}</div>
@@ -138,10 +138,10 @@
             :disabled="!canSubmit"
             class="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
           >
-            <span v-if="authStore.isLoading" class="absolute left-0 inset-y-0 flex items-center pl-3">
+            <span v-if="authStore.loading" class="absolute left-0 inset-y-0 flex items-center pl-3">
               <div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
             </span>
-            {{ authStore.isLoading ? 'Signing in...' : 'Sign in' }}
+            {{ authStore.loading ? 'Signing in...' : 'Sign in' }}
           </button>
         </div>
 
@@ -246,7 +246,7 @@ const isDev = computed(() => import.meta.env.DEV)
 const canSubmit = computed(() => {
   return form.value.email.trim() &&
          form.value.password.trim() &&
-         !authStore.isLoading
+         !authStore.loading
 })
 
 const localStorageToken = computed(() => !!localStorage.getItem('auth_token'))
@@ -264,15 +264,14 @@ async function handleLogin() {
 
   authStore.clearError()
   loginSuccess.value = false
-  
+
   try {
     console.log('🔐 LOGIN: Calling auth store login...')
-    const success = await authStore.login({
+    await authStore.login({
       email: form.value.email.trim(),
       password: form.value.password
     })
 
-    console.log('🔐 LOGIN: Auth store response:', { success })
     console.log('🔐 LOGIN: Post-login auth state:', {
       isAuthenticated: authStore.isAuthenticated,
       hasUser: !!authStore.user,
@@ -284,16 +283,17 @@ async function handleLogin() {
       }
     })
 
-    if (success) {
+    // Check if login was successful by verifying authentication state
+    if (authStore.isAuthenticated && authStore.user) {
       console.log('✅ LOGIN: Login successful, showing success message...')
       loginSuccess.value = true
-      
+
       // Wait a bit for UI feedback
       await new Promise(resolve => setTimeout(resolve, 500))
-      
+
       console.log('🔐 LOGIN: Emitting login-success event...')
       emit('login-success')
-      
+
       // Fallback navigation after a longer delay
       setTimeout(async () => {
         console.log('🔐 LOGIN: Fallback navigation triggered...')
@@ -302,9 +302,9 @@ async function handleLogin() {
           await forceNavigation()
         }
       }, 2000)
-      
+
     } else {
-      console.error('❌ LOGIN: Login failed')
+      console.error('❌ LOGIN: Login failed - not authenticated after login attempt')
       loginSuccess.value = false
     }
   } catch (error) {
@@ -357,7 +357,7 @@ function logDebugInfo() {
     },
     auth: {
       isAuthenticated: authStore.isAuthenticated,
-      isLoading: authStore.isLoading,
+      isLoading: authStore.loading,
       isInitialized: authStore.isInitialized,
       hasUser: !!authStore.user,
       hasToken: !!authStore.token,
