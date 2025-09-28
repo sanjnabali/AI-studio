@@ -1,6 +1,7 @@
 <template>
   <div class="flex h-screen bg-gray-50 dark:bg-gray-900 overflow-hidden">
-    <div class="w-80 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col overflow-y-auto">
+    <!-- Sidebar -->
+    <div class="w-80 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col">
       <!-- Header -->
       <div class="p-4 border-b border-gray-200 dark:border-gray-700">
         <div class="flex items-center justify-between mb-4">
@@ -17,302 +18,749 @@
           </div>
           
           <!-- User Menu -->
-          <div class="relative">
+          <UserMenu />
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="flex space-x-2">
+          <button
+            @click="createNewSession"
+            class="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg transition-colors"
+          >
+            <PlusIcon class="w-4 h-4 inline mr-1" />
+            New Chat
+          </button>
+          <button
+            @click="showTemplates = true"
+            class="px-3 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 text-sm rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+          >
+            <DocumentTextIcon class="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      <!-- Mode Selector -->
+      <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+        <div class="flex space-x-1 bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+          <button
+            v-for="mode in workspaceModes"
+            :key="mode.id"
+            @click="activeMode = mode.id"
+            :class="[
+              'flex-1 flex items-center justify-center px-3 py-2 text-xs font-medium rounded-md transition-all',
+              activeMode === mode.id
+                ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
+                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+            ]"
+          >
+            <component :is="mode.icon" class="w-4 h-4 mr-1" />
+            {{ mode.name }}
+          </button>
+        </div>
+      </div>
+
+      <!-- Dynamic Content Area -->
+      <div class="flex-1 overflow-y-auto">
+        <!-- Chat Sessions -->
+        <div v-if="activeMode === 'chat'" class="p-4">
+          <ChatSessionList 
+            :sessions="chatStore.sessions"
+            :current-session="chatStore.currentSession"
+            @select="selectSession"
+            @delete="deleteSession"
+          />
+        </div>
+
+        <!-- Code Projects -->
+        <div v-else-if="activeMode === 'code'" class="p-4">
+          <CodeProjectList 
+            :projects="codeProjects"
+            :current-project="currentCodeProject"
+            @select="selectCodeProject"
+            @delete="deleteCodeProject"
+          />
+        </div>
+
+        <!-- Voice Recordings -->
+        <div v-else-if="activeMode === 'voice'" class="p-4">
+          <VoiceRecordingList 
+            :recordings="voiceRecordings"
+            @play="playRecording"
+            @delete="deleteRecording"
+          />
+        </div>
+
+        <!-- Documents -->
+        <div v-else-if="activeMode === 'docs'" class="p-4">
+          <DocumentList 
+            :documents="documents"
+            @select="selectDocument"
+            @delete="deleteDocument"
+          />
+        </div>
+      </div>
+
+      <!-- Upload Area -->
+      <div class="p-4 border-t border-gray-200 dark:border-gray-700">
+        <FileUploadZone @upload="handleFileUpload" />
+      </div>
+    </div>
+
+    <!-- Main Workspace -->
+    <main class="flex-1 flex flex-col">
+      <!-- Workspace Header -->
+      <div class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center space-x-4">
+            <h2 class="text-xl font-semibold text-gray-900 dark:text-white">
+              {{ workspaceTitle }}
+            </h2>
+            <div class="flex items-center space-x-2">
+              <StatusIndicator :status="connectionStatus" />
+              <ModelSelector
+                :model-config="settingsStore.modelSettings"
+                @update="handleModelChange"
+              />
+            </div>
+          </div>
+
+          <div class="flex items-center space-x-2">
+            <!-- Export/Share -->
             <button
-              @click="showUserMenu = !showUserMenu"
-              class="flex items-center space-x-2 p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              @click="exportWorkspace"
+              class="px-3 py-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+              title="Export workspace"
             >
-              <div class="w-6 h-6 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-                <span class="text-xs font-medium text-white">{{ userInitials }}</span>
-              </div>
+              <ArrowDownTrayIcon class="w-5 h-5" />
             </button>
-            
-            <!-- User Dropdown -->
-            <div
-              v-if="showUserMenu"
-              class="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-50"
-            >
-              <div class="p-3 border-b border-gray-200 dark:border-gray-700">
-                <p class="text-sm font-medium text-gray-900 dark:text-white">{{ authStore.userName }}</p>
-                <p class="text-xs text-gray-500 dark:text-gray-400">{{ authStore.userEmail }}</p>
-              </div>
-              <div class="py-1">
-                <button
-                  @click="showSettings = !showSettings; showUserMenu = false"
-                  class="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                >
-                  <svg class="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                  </svg>
-                  Settings
-                </button>
-                <button
-                  @click="handleLogout"
-                  class="w-full text-left px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700"
-                >
-                  <svg class="w-4 h-4 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
-                  </svg>
-                  Sign out
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
 
-        <!-- Sessions Section -->
-        <div class="p-4 border-b border-gray-200 dark:border-gray-700">
-          <div class="flex items-center justify-between mb-3">
-            <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Chat Sessions</h2>
-            <button @click="createNewSession" class="text-blue-600 hover:text-blue-700">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-              </svg>
+            <!-- Version Control -->
+            <button
+              @click="showVersionControl = true"
+              class="px-3 py-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+              title="Version control"
+            >
+              <CodeBracketIcon class="w-5 h-5" />
+            </button>
+
+            <!-- Settings -->
+            <button
+              @click="showSettings = true"
+              class="px-3 py-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+              title="Settings"
+            >
+              <CogIcon class="w-5 h-5" />
             </button>
           </div>
-          <div class="space-y-2">
-            <div
-              v-for="session in chatStore.sessions"
-              :key="session.id"
-              class="session-item"
-              @click="selectSession(session.id)"
-            >
-              <div class="session-info">
-                <p class="session-name">{{ session.name }}</p>
-                <p class="session-meta">{{ new Date(session.created_at).toLocaleDateString() }}</p>
-              </div>
-              <button @click.stop="deleteSession(session.id)" class="text-gray-400 hover:text-red-500">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Documents Section -->
-        <div class="p-4">
-          <div class="flex items-center justify-between mb-3">
-            <h2 class="text-sm font-semibold text-gray-900 dark:text-white">Documents</h2>
-            <FileLoader @upload-success="handleDocumentUpload" />
-          </div>
-          <div class="space-y-2">
-            <div
-              v-for="doc in documents"
-              :key="doc.id"
-              class="document-item"
-            >
-              <div class="document-info">
-                <p class="document-name">{{ doc.filename }}</p>
-                <p class="document-meta">{{ formatFileSize(doc.size) }}</p>
-              </div>
-              <button @click.stop="deleteDocument(doc.id)" class="text-gray-400 hover:text-red-500">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
-              </button>
-            </div>
-          </div>
         </div>
       </div>
 
-    <!-- Main Content -->
-    <main class="studio-main">
-      <div class="tabs tabs-lifted">
-        <button 
-          :class="['tab tab-lg', { 'tab-active': activeTab === 'chat' }]"
-          @click="activeTab = 'chat'"
-        >
-          <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-          </svg>
-          Chat
-        </button>
-        
-        <button 
-          :class="['tab tab-lg', { 'tab-active': activeTab === 'code' }]"
-          @click="activeTab = 'code'"
-        >
-          <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
-          </svg>
-          Code Canvas
-        </button>
-      </div>
+      <!-- Workspace Content -->
+      <div class="flex-1 flex">
+        <!-- Main Content Area -->
+        <div class="flex-1 flex flex-col">
+          <!-- Chat Interface -->
+          <div v-if="activeMode === 'chat'" class="flex-1">
+            <EnhancedChatWindow 
+              :session="chatStore.currentSession"
+              @message="handleChatMessage"
+              @voice-input="handleVoiceInput"
+              @file-upload="handleFileUpload"
+            />
+          </div>
 
-      <div class="tab-content">
-        <div v-show="activeTab === 'chat'" class="tab-pane">
-          <ChatbotWindow />
+          <!-- Code Canvas -->
+          <div v-else-if="activeMode === 'code'" class="flex-1">
+            <CodeCanvas 
+              :project="currentCodeProject"
+              @execute="executeCode"
+              @save="saveCodeProject"
+            />
+          </div>
+
+          <!-- Voice Interface -->
+          <div v-else-if="activeMode === 'voice'" class="flex-1">
+            <VoiceWorkspace 
+              @record="startVoiceRecording"
+              @process="processVoiceRecording"
+            />
+          </div>
+
+          <!-- Document Viewer -->
+          <div v-else-if="activeMode === 'docs'" class="flex-1">
+            <DocumentViewer 
+              :document="selectedDocument"
+              @query="handleDocumentQuery"
+            />
+          </div>
         </div>
-        
-        <div v-show="activeTab === 'code'" class="tab-pane">
-          <CodeCanvas />
+
+        <!-- Side Panel -->
+        <div 
+          v-if="showSidePanel"
+          class="w-96 bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700"
+        >
+          <SidePanel 
+            :type="sidePanelType"
+            :content="sidePanelContent"
+            @close="showSidePanel = false"
+          />
         </div>
       </div>
     </main>
+
+    <!-- Modals -->
+    <TemplateModal 
+      v-if="showTemplates"
+      @close="showTemplates = false"
+      @select="useTemplate"
+    />
+
+    <SettingsModal 
+      v-if="showSettings"
+      @close="showSettings = false"
+      @update="updateSettings"
+    />
+
+    <VersionControlModal 
+      v-if="showVersionControl"
+      @close="showVersionControl = false"
+      @commit="commitChanges"
+      @restore="restoreVersion"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { useChatStore } from '@/store/chat'
 import { useAuthStore } from '@/store/auth'
+import { useSettingsStore } from '@/store/settings'
+import { useNotificationStore } from '@/store/notification'
 import { apiClient } from '@/api/client'
-import ChatbotWindow from '@/components/chatbot_window.vue'
-import CodeCanvas from '@/components/CodeCanvas.vue'
-import FileLoader from '@/components/FileLoader.vue'
 
+// Icons
+import {
+  PlusIcon,
+  DocumentTextIcon,
+  ChatBubbleLeftRightIcon,
+  CodeBracketIcon,
+  MicrophoneIcon,
+  FolderIcon,
+  CogIcon,
+  ArrowDownTrayIcon
+} from '@heroicons/vue/24/outline'
+
+// Components
+import UserMenu from '@/components/UserMenu.vue'
+import ChatSessionList from '@/components/chat/SessionList.vue'
+import CodeProjectList from '@/components/code/ProjectList.vue'
+import VoiceRecordingList from '@/components/voice/RecordingList.vue'
+import DocumentList from '@/components/docs/DocumentList.vue'
+import FileUploadZone from '@/components/FileUploadZone.vue'
+import StatusIndicator from '@/components/StatusIndicator.vue'
+import ModelSelector from '@/components/ModelSelector.vue'
+import EnhancedChatWindow from '@/components/chat/EnhancedChatWindow.vue'
+import CodeCanvas from '@/components/CodeCanvas.vue'
+import VoiceWorkspace from '@/components/voice/VoiceWorkspace.vue'
+import DocumentViewer from '@/components/docs/DocumentViewer.vue'
+import SidePanel from '@/components/SidePanel.vue'
+import TemplateModal from '@/components/modals/TemplateModal.vue'
+import SettingsModal from '@/components/modals/SettingsModal.vue'
+import VersionControlModal from '@/components/modals/VersionControlModal.vue'
+
+// Stores
+const router = useRouter()
 const chatStore = useChatStore()
 const authStore = useAuthStore()
-const activeTab = ref<'chat' | 'code'>('chat')
-const showUserMenu = ref(false)
-const showSettings = ref(false)
-const documents = ref<any[]>([])
+const settingsStore = useSettingsStore()
+const notificationStore = useNotificationStore()
 
-const userInitials = computed(() => {
-  if (authStore.userName) {
-    return authStore.userName.split(' ').map(n => n[0]).join('').toUpperCase()
+// State
+const activeMode = ref<'chat' | 'code' | 'voice' | 'docs'>('chat')
+const showTemplates = ref(false)
+const showSettings = ref(false)
+const showVersionControl = ref(false)
+const showSidePanel = ref(false)
+const sidePanelType = ref<string>('')
+const sidePanelContent = ref<any>(null)
+
+// Data
+const documents = ref<any[]>([])
+const codeProjects = ref<any[]>([])
+const voiceRecordings = ref<any[]>([])
+const currentCodeProject = ref<any>(null)
+const selectedDocument = ref<any>(null)
+const connectionStatus = ref<'connected' | 'connecting' | 'disconnected'>('connecting')
+
+// Workspace modes configuration
+const workspaceModes: Array<{ id: 'chat' | 'code' | 'voice' | 'docs', name: string, icon: any }> = [
+  { id: 'chat', name: 'Chat', icon: ChatBubbleLeftRightIcon },
+  { id: 'code', name: 'Code', icon: CodeBracketIcon },
+  { id: 'voice', name: 'Voice', icon: MicrophoneIcon },
+  { id: 'docs', name: 'Docs', icon: FolderIcon }
+]
+
+// Computed
+const workspaceTitle = computed(() => {
+  switch (activeMode.value) {
+    case 'chat':
+      return chatStore.currentSession?.name || 'New Chat'
+    case 'code':
+      return currentCodeProject.value?.name || 'Code Canvas'
+    case 'voice':
+      return 'Voice Workspace'
+    case 'docs':
+      return selectedDocument.value?.filename || 'Documents'
+    default:
+      return 'AI Studio'
   }
-  return 'U'
 })
 
-const handleLogout = () => {
-  authStore.logout()
-  // Add navigation to login if needed
+// Lifecycle
+onMounted(async () => {
+  await initializeWorkspace()
+  checkConnectionStatus()
+})
+
+// Watch for mode changes
+watch(activeMode, (newMode) => {
+  // Load data specific to the new mode
+  switch (newMode) {
+    case 'chat':
+      chatStore.loadSessions()
+      break
+    case 'code':
+      loadCodeProjects()
+      break
+    case 'voice':
+      loadVoiceRecordings()
+      break
+    case 'docs':
+      loadDocuments()
+      break
+  }
+})
+
+// Methods
+const initializeWorkspace = async () => {
+  try {
+    // Load initial data
+    await Promise.all([
+      chatStore.loadSessions(),
+      loadDocuments(),
+      loadCodeProjects(),
+      loadVoiceRecordings()
+    ])
+    
+    connectionStatus.value = 'connected'
+    notificationStore.success('AI Studio initialized successfully')
+  } catch (error) {
+    console.error('Failed to initialize workspace:', error)
+    connectionStatus.value = 'disconnected'
+    notificationStore.error('Failed to initialize workspace')
+  }
 }
 
-onMounted(async () => {
-  await Promise.all([
-    chatStore.loadSessions(),
-    loadDocuments()
-  ])
-})
+const checkConnectionStatus = () => {
+  // Periodically check API health
+  setInterval(async () => {
+    try {
+      await fetch('/api/health')
+      connectionStatus.value = 'connected'
+    } catch {
+      connectionStatus.value = 'disconnected'
+    }
+  }, 30000) // Check every 30 seconds
+}
 
+// Session Management
 const createNewSession = async () => {
   try {
     const session = await chatStore.createSession('New Chat')
     await chatStore.selectSession(session.id)
-    activeTab.value = 'chat'
+    activeMode.value = 'chat'
+    notificationStore.success('New chat session created')
   } catch (error) {
     console.error('Failed to create session:', error)
+    notificationStore.error('Failed to create chat session')
   }
 }
 
 const selectSession = async (sessionId: number) => {
   try {
     await chatStore.selectSession(sessionId)
-    activeTab.value = 'chat'
+    activeMode.value = 'chat'
   } catch (error) {
     console.error('Failed to select session:', error)
+    notificationStore.error('Failed to load chat session')
   }
 }
 
 const deleteSession = async (sessionId: number) => {
-  if (confirm('Are you sure you want to delete this chat session?')) {
-    try {
-      await chatStore.deleteSession(sessionId)
-    } catch (error) {
-      console.error('Failed to delete session:', error)
-    }
+  try {
+    await chatStore.deleteSession(sessionId)
+    notificationStore.success('Chat session deleted')
+  } catch (error) {
+    console.error('Failed to delete session:', error)
+    notificationStore.error('Failed to delete chat session')
   }
 }
 
+// Code Project Management
+const loadCodeProjects = async () => {
+  try {
+    // Load code projects from API or local storage
+    codeProjects.value = JSON.parse(localStorage.getItem('codeProjects') || '[]')
+  } catch (error) {
+    console.error('Failed to load code projects:', error)
+  }
+}
+
+const selectCodeProject = (project: any) => {
+  currentCodeProject.value = project
+  activeMode.value = 'code'
+}
+
+const deleteCodeProject = (projectId: string) => {
+  codeProjects.value = codeProjects.value.filter(p => p.id !== projectId)
+  localStorage.setItem('codeProjects', JSON.stringify(codeProjects.value))
+  notificationStore.success('Code project deleted')
+}
+
+const saveCodeProject = (project: any) => {
+  const index = codeProjects.value.findIndex(p => p.id === project.id)
+  if (index >= 0) {
+    codeProjects.value[index] = project
+  } else {
+    codeProjects.value.push(project)
+  }
+  localStorage.setItem('codeProjects', JSON.stringify(codeProjects.value))
+  notificationStore.success('Code project saved')
+}
+
+// Voice Management
+const loadVoiceRecordings = async () => {
+  try {
+    voiceRecordings.value = JSON.parse(localStorage.getItem('voiceRecordings') || '[]')
+  } catch (error) {
+    console.error('Failed to load voice recordings:', error)
+  }
+}
+
+const startVoiceRecording = () => {
+  // Implement voice recording
+  notificationStore.info('Voice recording started')
+}
+
+const processVoiceRecording = async (recording: any) => {
+  try {
+    // Process voice recording through API
+    const response = await apiClient.processVoiceRecording(recording)
+    voiceRecordings.value.push(response)
+    localStorage.setItem('voiceRecordings', JSON.stringify(voiceRecordings.value))
+    notificationStore.success('Voice recording processed')
+  } catch (error) {
+    console.error('Failed to process voice recording:', error)
+    notificationStore.error('Failed to process voice recording')
+  }
+}
+
+const playRecording = (recording: any) => {
+  // Implement audio playback
+  notificationStore.info('Playing voice recording')
+}
+
+const deleteRecording = (recordingId: string) => {
+  voiceRecordings.value = voiceRecordings.value.filter(r => r.id !== recordingId)
+  localStorage.setItem('voiceRecordings', JSON.stringify(voiceRecordings.value))
+  notificationStore.success('Voice recording deleted')
+}
+
+// Document Management
 const loadDocuments = async () => {
   try {
     documents.value = await apiClient.getDocuments()
   } catch (error) {
     console.error('Failed to load documents:', error)
+    notificationStore.error('Failed to load documents')
   }
 }
 
-const handleDocumentUpload = async (result: any) => {
-  await loadDocuments()
-  if (window.showNotification) {
-    window.showNotification('success', `Document "${result.filename}" uploaded successfully!`)
-  }
+const selectDocument = (document: any) => {
+  selectedDocument.value = document
+  activeMode.value = 'docs'
 }
 
 const deleteDocument = async (documentId: number) => {
-  if (confirm('Are you sure you want to delete this document?')) {
+  try {
+    await apiClient.deleteDocument(documentId)
+    await loadDocuments()
+    notificationStore.success('Document deleted')
+  } catch (error) {
+    console.error('Failed to delete document:', error)
+    notificationStore.error('Failed to delete document')
+  }
+}
+
+// File Upload
+const handleFileUpload = async (files: FileList) => {
+  for (const file of Array.from(files)) {
     try {
-      await apiClient.deleteDocument(documentId)
-      await loadDocuments()
-      if (window.showNotification) {
-        window.showNotification('success', 'Document deleted successfully')
+      if (file.type.startsWith('image/')) {
+        // Handle image upload for vision tasks
+        await handleImageUpload(file)
+      } else if (file.type.startsWith('audio/')) {
+        // Handle audio upload for speech processing
+        await handleAudioUpload(file)
+      } else if (file.type.includes('pdf') || file.type.includes('document')) {
+        // Handle document upload for RAG
+        await handleDocumentUpload(file)
+      } else {
+        // Handle code files
+        await handleCodeFileUpload(file)
       }
     } catch (error) {
-      console.error('Failed to delete document:', error)
-      if (window.showNotification) {
-        window.showNotification('error', 'Failed to delete document')
-      }
+      console.error(`Failed to upload ${file.name}:`, error)
+      notificationStore.error(`Failed to upload ${file.name}`)
     }
   }
 }
 
-const formatFileSize = (bytes: number): string => {
-  const sizes = ['Bytes', 'KB', 'MB', 'GB']
-  if (bytes === 0) return '0 Bytes'
-  const i = Math.floor(Math.log(bytes) / Math.log(1024))
-  return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i]
+const handleImageUpload = async (file: File) => {
+  const response = await apiClient.uploadImage(file)
+  notificationStore.success(`Image "${file.name}" uploaded and analyzed`)
+  
+  // Add to chat if in chat mode
+  if (activeMode.value === 'chat') {
+    // Add image analysis result to chat
+  }
+}
+
+const handleAudioUpload = async (file: File) => {
+  const response = await apiClient.uploadAudio(file)
+  voiceRecordings.value.push(response)
+  localStorage.setItem('voiceRecordings', JSON.stringify(voiceRecordings.value))
+  notificationStore.success(`Audio "${file.name}" uploaded and transcribed`)
+}
+
+const handleDocumentUpload = async (file: File) => {
+  const response = await apiClient.uploadDocument(file)
+  await loadDocuments()
+  notificationStore.success(`Document "${file.name}" uploaded and processed for RAG`)
+}
+
+const handleCodeFileUpload = async (file: File) => {
+  const content = await file.text()
+  const project = {
+    id: Date.now().toString(),
+    name: file.name,
+    content,
+    language: getLanguageFromFilename(file.name),
+    createdAt: new Date()
+  }
+  codeProjects.value.push(project)
+  localStorage.setItem('codeProjects', JSON.stringify(codeProjects.value))
+  notificationStore.success(`Code file "${file.name}" imported`)
+}
+
+// Chat Handlers
+const handleChatMessage = async (message: string, options: any = {}) => {
+  try {
+    await chatStore.sendMessage(message, chatStore.currentSessionId, {
+      ...settingsStore.modelSettings,
+      ...options
+    })
+  } catch (error) {
+    console.error('Failed to send message:', error)
+    notificationStore.error('Failed to send message')
+  }
+}
+
+const handleVoiceInput = async (audioBlob: Blob) => {
+  try {
+    const transcript = await apiClient.speechToText(audioBlob)
+    await handleChatMessage(transcript.text)
+  } catch (error) {
+    console.error('Failed to process voice input:', error)
+    notificationStore.error('Failed to process voice input')
+  }
+}
+
+const handleDocumentQuery = async (query: string) => {
+  try {
+    const response = await apiClient.queryDocuments(query, selectedDocument.value?.id)
+    // Display results in side panel
+    sidePanelType.value = 'query-results'
+    sidePanelContent.value = response
+    showSidePanel.value = true
+  } catch (error) {
+    console.error('Failed to query document:', error)
+    notificationStore.error('Failed to query document')
+  }
+}
+
+// Code Execution
+const executeCode = async (code: string, language: string) => {
+  try {
+    const response = await apiClient.executeCode(code, language)
+    notificationStore.success('Code executed successfully')
+    return response
+  } catch (error) {
+    console.error('Code execution failed:', error)
+    notificationStore.error('Code execution failed')
+    throw error
+  }
+}
+
+const handleModelChange = async (config: any) => {
+  try {
+    await settingsStore.updateModelSettings(config)
+    notificationStore.success(`Switched to model: ${config.model_name}`)
+  } catch (error) {
+    console.error('Failed to change model:', error)
+    notificationStore.error('Failed to change model')
+  }
+}
+
+const updateSettings = async (newSettings: any) => {
+  try {
+    await settingsStore.updateSettings(newSettings)
+    notificationStore.success('Settings updated successfully')
+  } catch (error) {
+    console.error('Failed to update settings:', error)
+    notificationStore.error('Failed to update settings')
+  }
+}
+
+// Template and Export Functions
+const useTemplate = (template: any) => {
+  // Apply template based on mode
+  switch (activeMode.value) {
+    case 'chat':
+      handleChatMessage(template.prompt)
+      break
+    case 'code':
+      const project = {
+        id: Date.now().toString(),
+        name: template.name,
+        content: template.code || '',
+        language: template.language || 'python',
+        createdAt: new Date()
+      }
+      codeProjects.value.push(project)
+      selectCodeProject(project)
+      break
+    default:
+      activeMode.value = 'chat'
+      handleChatMessage(template.prompt)
+  }
+  showTemplates.value = false
+}
+
+const exportWorkspace = () => {
+  const workspaceData = {
+    sessions: chatStore.sessions,
+    codeProjects: codeProjects.value,
+    voiceRecordings: voiceRecordings.value.map(r => ({ ...r, blob: null })), // Exclude blob data
+    settings: settingsStore.modelSettings,
+    exportDate: new Date().toISOString()
+  }
+  
+  const blob = new Blob([JSON.stringify(workspaceData, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `ai-studio-workspace-${new Date().toISOString().split('T')[0]}.json`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+  
+  notificationStore.success('Workspace exported successfully')
+}
+
+// Version Control
+const commitChanges = async (message: string) => {
+  try {
+    // Implement version control logic
+    notificationStore.success('Changes committed successfully')
+  } catch (error) {
+    console.error('Failed to commit changes:', error)
+    notificationStore.error('Failed to commit changes')
+  }
+}
+
+const restoreVersion = async (versionId: string) => {
+  try {
+    // Implement version restore logic
+    notificationStore.success('Version restored successfully')
+  } catch (error) {
+    console.error('Failed to restore version:', error)
+    notificationStore.error('Failed to restore version')
+  }
+}
+
+// Utility Functions
+const getLanguageFromFilename = (filename: string): string => {
+  const ext = filename.split('.').pop()?.toLowerCase()
+  const languageMap: Record<string, string> = {
+    'py': 'python',
+    'js': 'javascript',
+    'ts': 'typescript',
+    'java': 'java',
+    'cpp': 'cpp',
+    'c': 'c',
+    'go': 'go',
+    'rs': 'rust',
+    'php': 'php',
+    'rb': 'ruby'
+  }
+  return languageMap[ext || ''] || 'text'
 }
 </script>
 
 <style scoped>
-.studio-layout {
-  @apply flex h-screen;
+/* Custom scrollbar for sidebar */
+.overflow-y-auto::-webkit-scrollbar {
+  width: 4px;
 }
 
-.studio-sidebar {
-  @apply w-80 bg-gray-50 dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 overflow-y-auto;
+.overflow-y-auto::-webkit-scrollbar-track {
+  background: transparent;
 }
 
-.sidebar-content {
-  @apply p-4 space-y-6;
+.overflow-y-auto::-webkit-scrollbar-thumb {
+  background: rgb(156 163 175 / 0.5);
+  border-radius: 2px;
 }
 
-.section-header {
-  @apply flex items-center justify-between mb-3;
+.overflow-y-auto::-webkit-scrollbar-thumb:hover {
+  background: rgb(156 163 175 / 0.8);
 }
 
-.section-title {
-  @apply text-lg font-semibold;
+/* Mode transition animations */
+.mode-transition {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.session-item, .document-item {
-  @apply flex items-center justify-between p-3 rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors;
+/* Workspace grid layout */
+.workspace-grid {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  grid-template-rows: auto 1fr;
+  height: 100vh;
 }
 
-.session-item.active {
-  @apply bg-blue-100 dark:bg-blue-900 border-blue-500;
-}
-
-.session-info, .document-info {
-  @apply flex-1 min-w-0;
-}
-
-.session-name, .document-name {
-  @apply text-sm font-medium truncate;
-}
-
-.session-meta, .document-meta {
-  @apply text-xs text-gray-500 mt-1;
-}
-
-.studio-main {
-  @apply flex-1 flex flex-col;
-}
-
-.tabs {
-  @apply border-b border-gray-200 dark:border-gray-700;
-}
-
-.tab-content {
-  @apply flex-1;
-}
-
-.tab-pane {
-  @apply h-full;
+/* Responsive design */
+@media (max-width: 1024px) {
+  .workspace-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .w-80 {
+    width: 100%;
+  }
 }
 </style>

@@ -1,11 +1,16 @@
-<!-- Frontend/src/App.vue -->
+<!-- Frontend/src/App.vue - Enhanced with proper theming and multimodal support -->
 <template>
-  <div id="app" :data-theme="settingsStore.theme" class="min-h-screen">
+  <div id="app" :class="[themeClass, 'min-h-screen transition-all duration-300']">
     <!-- Loading screen -->
     <div v-if="isLoading" class="loading-screen">
       <div class="flex flex-col items-center justify-center min-h-screen">
-        <div class="loading loading-spinner loading-lg text-primary"></div>
-        <p class="mt-4 text-lg">Loading AI Studio...</p>
+        <div class="relative">
+          <div class="w-16 h-16 border-4 border-blue-200 dark:border-blue-800 rounded-full animate-spin">
+            <div class="absolute top-0 left-0 w-4 h-4 bg-blue-600 rounded-full"></div>
+          </div>
+        </div>
+        <h2 class="mt-6 text-xl font-semibold text-gray-900 dark:text-white">AI Studio</h2>
+        <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">Initializing multimodal AI workspace...</p>
       </div>
     </div>
 
@@ -16,31 +21,42 @@
       
       <!-- Main content -->
       <main class="main-content">
-        <RouterView />
+        <RouterView v-slot="{ Component }">
+          <Transition name="page" mode="out-in">
+            <component :is="Component" />
+          </Transition>
+        </RouterView>
       </main>
 
-      <!-- Toast notifications -->
-      <div class="toast toast-end z-50">
-        <div v-for="notification in notifications" :key="notification.id" 
-             :class="['alert', `alert-${notification.type}`]">
-          <span>{{ notification.message }}</span>
-          <button @click="removeNotification(notification.id)" class="btn btn-ghost btn-xs">
-            ×
-          </button>
-        </div>
-      </div>
+      <!-- Global notifications -->
+      <NotificationContainer />
 
       <!-- Error boundary -->
-      <div v-if="hasError" class="error-boundary">
-        <div class="alert alert-error">
-          <svg class="stroke-current shrink-0 w-6 h-6" fill="none" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <div>
-            <h3 class="font-bold">Application Error</h3>
-            <div class="text-xs">{{ errorMessage }}</div>
+      <div v-if="hasError" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
+          <div class="flex items-center mb-4">
+            <div class="w-10 h-10 bg-red-100 dark:bg-red-900 rounded-full flex items-center justify-center mr-3">
+              <svg class="w-5 h-5 text-red-600 dark:text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+              </svg>
+            </div>
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Application Error</h3>
           </div>
-          <button @click="resetError" class="btn btn-sm">Reload</button>
+          <p class="text-gray-600 dark:text-gray-300 mb-4">{{ errorMessage }}</p>
+          <div class="flex space-x-3">
+            <button 
+              @click="resetError" 
+              class="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+            >
+              Reload App
+            </button>
+            <button 
+              @click="reportError" 
+              class="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+            >
+              Report Issue
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -48,106 +64,123 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onErrorCaptured } from 'vue'
+import { ref, computed, onMounted, onErrorCaptured, watch } from 'vue'
 import { RouterView, useRouter } from 'vue-router'
 import { useAuthStore } from './store/auth'
 import { useSettingsStore } from './store/settings'
+import { useNotificationStore } from './store/notification'
 import Navbar from './components/Navbar.vue'
+import NotificationContainer from './components/NotificationContainer.vue'
 
 const router = useRouter()
-
-interface Notification {
-  id: string
-  type: 'success' | 'error' | 'warning' | 'info'
-  message: string
-  timeout?: number
-}
-
 const authStore = useAuthStore()
 const settingsStore = useSettingsStore()
+const notificationStore = useNotificationStore()
 
 const isLoading = ref(true)
 const hasError = ref(false)
 const errorMessage = ref('')
-const notifications = ref<Notification[]>([])
+
+// Theme management
+const themeClass = computed(() => {
+  return settingsStore.isDarkMode ? 'dark' : 'light'
+})
+
+// Watch for theme changes and apply to DOM
+watch(
+  () => settingsStore.theme,
+  (newTheme) => {
+    document.documentElement.classList.remove('light', 'dark')
+    document.documentElement.classList.add(newTheme)
+    document.documentElement.setAttribute('data-theme', newTheme)
+  },
+  { immediate: true }
+)
 
 onMounted(async () => {
   try {
+    console.log('🚀 AI Studio: Initializing application...')
+
     // Wait for router to be ready
     await router.isReady()
-    console.log('✅ App: Router is ready')
+    console.log('✅ Router initialized')
 
-    // Initialize auth
+    // Initialize auth system
     await authStore.initializeAuth()
-    console.log('✅ App: Auth initialized')
+    console.log('✅ Authentication system initialized')
+
+    // Initialize settings and apply theme
+    settingsStore.loadSettings()
+    console.log('✅ Settings loaded')
 
     // Check API health
-    const healthResponse = await fetch('/api/health')
-    if (!healthResponse.ok) {
-      throw new Error(`API health check failed: ${healthResponse.status}`)
+    try {
+      const healthResponse = await fetch('/api/health')
+      if (!healthResponse.ok) {
+        throw new Error(`API health check failed: ${healthResponse.status}`)
+      }
+      console.log('✅ Backend API is healthy')
+    } catch (apiError) {
+      console.warn('⚠️ Backend API health check failed:', apiError)
+      notificationStore.add({
+        type: 'warning',
+        message: 'Backend API is not responding. Some features may be limited.',
+        duration: 5000
+      })
     }
-    console.log('✅ App: API health check passed')
 
-    // Load user settings if authenticated
+    // Load user-specific data if authenticated
     if (authStore.isAuthenticated) {
-      settingsStore.loadSettings()
-      console.log('✅ App: Settings loaded')
+      await loadUserData()
     }
 
-    // If not authenticated, ensure we're on auth page
-    if (!authStore.isAuthenticated && router.currentRoute.value.path !== '/auth') {
-      console.log('🔀 App: Not authenticated, navigating to /auth')
-      await router.replace('/auth')
-    }
+    console.log('✅ AI Studio initialization complete')
     
   } catch (error: any) {
-    console.error('App initialization error:', error)
-    if (error.response?.status === 401 || !authStore.isAuthenticated) {
-      // Unauthorized - ensure auth page
-      authStore.logout()
-      if (router.currentRoute.value.path !== '/auth') {
-        await router.replace('/auth')
-      }
-    } else {
-      showNotification('error', 'Failed to initialize application')
-      hasError.value = true
-      errorMessage.value = error.message || 'Initialization failed'
-    }
+    console.error('❌ Application initialization error:', error)
+    handleInitializationError(error)
   } finally {
     isLoading.value = false
   }
 })
 
-onErrorCaptured((error: Error) => {
-  console.error('Vue error captured:', error)
+const loadUserData = async () => {
+  try {
+    // Load user preferences and settings
+    await settingsStore.loadUserPreferences()
+    console.log('✅ User preferences loaded')
+  } catch (error) {
+    console.warn('⚠️ Failed to load user preferences:', error)
+  }
+}
+
+const handleInitializationError = (error: any) => {
+  if (error.response?.status === 401 || !authStore.isAuthenticated) {
+    // Authentication error - redirect to auth
+    authStore.logout()
+    router.replace('/auth').catch(console.error)
+  } else {
+    // Other initialization errors
+    hasError.value = true
+    errorMessage.value = error.message || 'Failed to initialize AI Studio'
+    notificationStore.add({
+      type: 'error',
+      message: 'Failed to initialize application',
+      duration: 0 // Persistent until dismissed
+    })
+  }
+}
+
+onErrorCaptured((error: Error, instance, info) => {
+  console.error('🚨 Vue error captured:', error, info)
   hasError.value = true
-  errorMessage.value = error.message
+  errorMessage.value = `Component error: ${error.message}`
+  
+  // Report to error tracking service
+  reportErrorToService(error, info)
+  
   return false
 })
-
-const showNotification = (type: Notification['type'], message: string, timeout = 5000) => {
-  const notification: Notification = {
-    id: Math.random().toString(36).substr(2, 9),
-    type,
-    message,
-    timeout
-  }
-  
-  notifications.value.push(notification)
-  
-  if (timeout > 0) {
-    setTimeout(() => {
-      removeNotification(notification.id)
-    }, timeout)
-  }
-}
-
-const removeNotification = (id: string) => {
-  const index = notifications.value.findIndex(n => n.id === id)
-  if (index > -1) {
-    notifications.value.splice(index, 1)
-  }
-}
 
 const resetError = () => {
   hasError.value = false
@@ -155,104 +188,108 @@ const resetError = () => {
   window.location.reload()
 }
 
-// Global error handler
-window.addEventListener('unhandledrejection', (event) => {
-  console.error('Unhandled promise rejection:', event.reason)
-  showNotification('error', 'An unexpected error occurred')
-})
-
-// Export for global use
-window.showNotification = showNotification
-</script>
-
-<style>
-/* Global styles */
-html, body, #app {
-  height: 100%;
-  margin: 0;
-  padding: 0;
+const reportError = () => {
+  // Implement error reporting
+  const errorReport = {
+    message: errorMessage.value,
+    timestamp: new Date().toISOString(),
+    url: window.location.href,
+    userAgent: navigator.userAgent
+  }
+  
+  console.log('📊 Error report:', errorReport)
+  notificationStore.add({
+    type: 'info',
+    message: 'Error report generated. Check console for details.',
+    duration: 3000
+  })
 }
 
+const reportErrorToService = (error: Error, info?: string) => {
+  // In a real application, send to error tracking service
+  if (import.meta.env.PROD) {
+    // Example: Sentry, LogRocket, etc.
+    console.log('📊 Would report to error service:', { error, info })
+  }
+}
+
+// Global error handler for unhandled promises
+window.addEventListener('unhandledrejection', (event) => {
+  console.error('🚨 Unhandled promise rejection:', event.reason)
+  notificationStore.add({
+    type: 'error',
+    message: 'An unexpected error occurred. Please refresh the page.',
+    duration: 5000
+  })
+})
+
+// Global performance monitoring
+if (import.meta.env.PROD) {
+  // Monitor performance
+  window.addEventListener('load', () => {
+    if (performance.mark) {
+      performance.mark('app-loaded')
+    }
+  })
+}
+</script>
+
+<style scoped>
+/* App container */
 .app-container {
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
+  @apply flex flex-col min-h-screen;
 }
 
 .main-content {
-  flex: 1;
-  overflow: hidden;
+  @apply flex-1 overflow-hidden;
 }
 
+/* Loading screen */
 .loading-screen {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: var(--fallback-b1, oklch(var(--b1)/var(--tw-bg-opacity)));
-  z-index: 9999;
+  @apply fixed inset-0 bg-white dark:bg-gray-900 z-50 flex items-center justify-center;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 }
 
-.error-boundary {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 9999;
-  max-width: 90vw;
+.loading-screen.dark {
+  background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
 }
 
-/* Dark mode styles */
-[data-theme="dark"] {
-  --tw-bg-opacity: 1;
-  background-color: rgb(30 41 59 / var(--tw-bg-opacity));
-  color: rgb(248 250 252);
+/* Page transitions */
+.page-enter-active,
+.page-leave-active {
+  transition: all 0.3s ease;
 }
 
-/* Custom scrollbars */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: rgb(156 163 175);
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: rgb(107 114 128);
-}
-
-/* Code highlighting */
-.hljs {
-  background: #1e293b !important;
-  border-radius: 8px;
-}
-
-/* Animation utilities */
-.fade-enter-active, .fade-leave-active {
-  transition: opacity 0.3s ease;
-}
-
-.fade-enter-from, .fade-leave-to {
+.page-enter-from,
+.page-leave-to {
   opacity: 0;
+  transform: translateY(10px);
 }
 
-.slide-enter-active, .slide-leave-active {
-  transition: transform 0.3s ease;
+/* Theme transitions */
+.app-container {
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
-.slide-enter-from {
-  transform: translateX(-100%);
+/* Scrollbar styling */
+:deep(::-webkit-scrollbar) {
+  @apply w-2 h-2;
 }
 
-.slide-leave-to {
-  transform: translateX(100%);
+:deep(::-webkit-scrollbar-track) {
+  @apply bg-gray-100 dark:bg-gray-800;
+}
+
+:deep(::-webkit-scrollbar-thumb) {
+  @apply bg-gray-300 dark:bg-gray-600 rounded-full;
+}
+
+:deep(::-webkit-scrollbar-thumb:hover) {
+  @apply bg-gray-400 dark:bg-gray-500;
+}
+
+/* Focus styles for accessibility */
+:deep(*:focus-visible) {
+  @apply outline-2 outline-blue-500 outline-offset-2;
 }
 </style>

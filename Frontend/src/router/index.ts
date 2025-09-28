@@ -5,11 +5,7 @@ import { useAuthStore } from '../store/auth'
 // Type declarations for Google Analytics gtag
 declare global {
   interface Window {
-    gtag?: (
-      command: 'config' | 'set' | 'event' | 'get',
-      targetId: string,
-      config?: any
-    ) => void;
+    gtag?: (...args: any[]) => void
   }
 }
 

@@ -303,9 +303,15 @@ class ApiClient {
   }
 
   // Voice endpoints
-  async speechToText(audioFile: File): Promise<VoiceResult> {
+  async speechToText(audioFile: File | Blob): Promise<VoiceResult> {
     const formData = new FormData()
-    formData.append('audio', audioFile)
+    let audioFileToSend: File
+    if (audioFile instanceof Blob && !(audioFile instanceof File)) {
+      audioFileToSend = new File([audioFile], 'recording.wav', { type: 'audio/wav' })
+    } else {
+      audioFileToSend = audioFile as File
+    }
+    formData.append('audio', audioFileToSend)
     
     const response = await this.client.post<VoiceResult>('/api/voice/speech-to-text', formData, {
       headers: {
@@ -437,6 +443,120 @@ class ApiClient {
     const response = await this.client.post('/api/image/analyze', {
       image_data: imageData,
       prompt
+    })
+    return response.data
+  }
+
+  async uploadImage(file: File): Promise<{
+    analysis: string
+    image_data: string
+    filename: string
+    processing_time: number
+  }> {
+    const formData = new FormData()
+    formData.append('file', file)
+
+    const response = await this.client.post('/api/image/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    })
+    return response.data
+  }
+
+  async processVoiceRecording(audioBlob: Blob): Promise<VoiceResult> {
+    return this.speechToText(audioBlob)
+  }
+
+  async uploadAudio(file: File): Promise<VoiceResult> {
+    return this.speechToText(file)
+  }
+
+  // User preferences endpoints
+  async getUserPreferences(): Promise<{
+    model_settings: any
+    voice_settings: any
+    code_settings: any
+    ui_settings: any
+    experiment_settings: any
+  }> {
+    const response = await this.client.get('/api/auth/preferences')
+    return response.data
+  }
+
+  async saveUserPreferences(preferences: {
+    model_settings: any
+    voice_settings: any
+    code_settings: any
+    ui_settings: any
+    experiment_settings: any
+  }): Promise<void> {
+    await this.client.put('/api/auth/preferences', preferences)
+  }
+
+  // Code assistant endpoints
+  async requestCodeReview(code: string, language: string): Promise<{
+    review: string
+    suggestions: Array<{
+      type: string
+      message: string
+      line?: number
+      column?: number
+    }>
+  }> {
+    const response = await this.client.post('/api/code/review', {
+      code,
+      language
+    })
+    return response.data
+  }
+
+  async optimizeCode(code: string, language: string): Promise<{
+    optimized_code: string
+    explanation: string
+    improvements: string[]
+  }> {
+    const response = await this.client.post('/api/code/optimize', {
+      code,
+      language
+    })
+    return response.data
+  }
+
+  async generateDocumentation(code: string, language: string): Promise<{
+    documentation: string
+    format: string
+  }> {
+    const response = await this.client.post('/api/code/documentation', {
+      code,
+      language
+    })
+    return response.data
+  }
+
+  async generateTests(code: string, language: string): Promise<{
+    test_code: string
+    test_framework: string
+    coverage_estimate: number
+  }> {
+    const response = await this.client.post('/api/code/tests', {
+      code,
+      language
+    })
+    return response.data
+  }
+
+  async chatWithAI(message: string, context?: {
+    code?: string
+    language?: string
+    context?: string
+  }): Promise<{
+    message: string
+    suggestions?: string[]
+  }> {
+    const response = await this.client.post('/api/chat/assistant', {
+      message,
+      context
     })
     return response.data
   }

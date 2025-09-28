@@ -1,262 +1,508 @@
-<!-- Frontend/src/components/chatbot_window.vue -->
+<!-- Frontend/src/components/chat/EnhancedChatWindow.vue -->
 <template>
-  <div class="chat-window">
+  <div class="flex flex-col h-full bg-white dark:bg-gray-900">
     <!-- Chat Header -->
-    <div class="chat-header">
-      <div class="session-info">
-        <h3 v-if="chatStore.currentSession">
-          {{ chatStore.currentSession.name }}
-        </h3>
-        <span v-else class="text-gray-500">No session selected</span>
+    <div class="flex items-center justify-between px-6 py-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+      <div class="flex items-center space-x-3">
+        <div class="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+          <ChatBubbleLeftRightIcon class="w-4 h-4 text-white" />
+        </div>
+        <div>
+          <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
+            {{ session?.name || 'New Chat' }}
+          </h3>
+          <p class="text-xs text-gray-500 dark:text-gray-400">
+            {{ messageCount }} messages • {{ formatDate(session?.updated_at) }}
+          </p>
+        </div>
       </div>
-      <div class="chat-actions">
-        <button 
-          @click="toggleSettings"
-          class="btn btn-ghost btn-sm"
-          title="Settings"
+
+      <div class="flex items-center space-x-2">
+        <!-- RAG Toggle -->
+        <button
+          @click="ragEnabled = !ragEnabled"
+          :class="[
+            'px-3 py-1.5 text-xs font-medium rounded-full border transition-all',
+            ragEnabled 
+              ? 'bg-green-100 text-green-800 border-green-300 dark:bg-green-900 dark:text-green-100 dark:border-green-700'
+              : 'bg-gray-100 text-gray-600 border-gray-300 dark:bg-gray-700 dark:text-gray-400 dark:border-gray-600'
+          ]"
+          title="Toggle RAG (Retrieval Augmented Generation)"
         >
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                  d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-          </svg>
+          <DocumentMagnifyingGlassIcon class="w-3 h-3 inline mr-1" />
+          RAG {{ ragEnabled ? 'ON' : 'OFF' }}
         </button>
-        <button 
-          @click="clearChat"
-          class="btn btn-ghost btn-sm"
-          title="Clear Chat"
-        >
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-          </svg>
-        </button>
+
+        <!-- Model Info -->
+        <div class="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 rounded-full">
+          {{ currentModel }}
+        </div>
+
+        <!-- More Actions -->
+        <DropdownMenu>
+          <template #trigger>
+            <button class="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
+              <EllipsisVerticalIcon class="w-5 h-5" />
+            </button>
+          </template>
+          <template #content>
+            <button @click="exportChat" class="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700">
+              Export Chat
+            </button>
+            <button @click="clearChat" class="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100 dark:hover:bg-gray-700">
+              Clear Chat
+            </button>
+          </template>
+        </DropdownMenu>
       </div>
     </div>
 
     <!-- Messages Area -->
-    <div class="messages-container" ref="messagesContainer">
-      <div v-if="!chatStore.hasMessages" class="empty-state">
-        <div class="text-center py-12">
-          <svg class="w-16 h-16 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                  d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-          </svg>
-          <h3 class="text-lg font-medium text-gray-500 mb-2">Start a conversation</h3>
-          <p class="text-gray-400">Ask me anything or upload a document to analyze</p>
-        </div>
-      </div>
-
-      <div v-for="message in chatStore.messages" :key="message.id || message.timestamp" class="message">
-        <div :class="['message-bubble', message.role]">
-          <div class="message-header">
-            <span class="message-role">{{ message.role === 'user' ? 'You' : 'AI Assistant' }}</span>
-            <span class="message-time">{{ formatTime(message.timestamp) }}</span>
+    <div 
+      ref="messagesContainer"
+      class="flex-1 overflow-y-auto px-6 py-4 space-y-6"
+      @scroll="handleScroll"
+    >
+      <!-- Welcome Message -->
+      <div v-if="messages.length === 0" class="flex items-center justify-center h-full">
+        <div class="text-center max-w-md">
+          <div class="w-16 h-16 mx-auto mb-4 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+            <SparklesIcon class="w-8 h-8 text-white" />
           </div>
-          
-          <div class="message-content">
-            <div v-if="message.message_type === 'code'" class="code-block">
-              <pre><code>{{ message.content }}</code></pre>
-            </div>
-            <div v-else-if="message.message_type === 'image'" class="image-block">
-              <img :src="message.content" alt="Generated image" class="max-w-full h-auto rounded" />
-            </div>
-            <div v-else class="text-content" v-html="formatMessage(message.content)"></div>
-          </div>
-
-          <div v-if="message.metadata && message.role === 'assistant'" class="message-metadata">
-            <small class="text-gray-500">
-              Model: {{ message.metadata.model_used }} | 
-              Time: {{ message.metadata.processing_time?.toFixed(2) }}s |
-              Tokens: {{ message.metadata.token_count }}
-            </small>
-            <div v-if="message.metadata.sources" class="sources mt-2">
-              <details class="text-sm">
-                <summary class="cursor-pointer text-blue-600">Sources ({{ message.metadata.sources.length }})</summary>
-                <ul class="mt-2 space-y-1">
-                  <li v-for="source in message.metadata.sources" :key="source.document" 
-                      class="bg-gray-100 dark:bg-gray-800 p-2 rounded">
-                    <strong>{{ source.document }}</strong>
-                    <span class="text-gray-600"> ({{ (source.similarity * 100).toFixed(1) }}% match)</span>
-                  </li>
-                </ul>
-              </details>
-            </div>
+          <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+            Welcome to AI Studio
+          </h3>
+          <p class="text-gray-600 dark:text-gray-400 mb-4">
+            Start a conversation, upload files, or use voice input to interact with your AI assistant.
+          </p>
+          <div class="flex flex-wrap gap-2 justify-center">
+            <button 
+              v-for="suggestion in quickSuggestions"
+              :key="suggestion"
+              @click="sendQuickMessage(suggestion)"
+              class="px-3 py-1.5 text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+            >
+              {{ suggestion }}
+            </button>
           </div>
         </div>
       </div>
 
-      <div v-if="chatStore.isTyping" class="typing-indicator">
-        <div class="message-bubble assistant">
-          <div class="typing-animation">
-            <span></span>
-            <span></span>
-            <span></span>
+      <!-- Messages -->
+      <div
+        v-for="(message, index) in messages"
+        :key="message.id || index"
+        :class="[
+          'flex',
+          message.role === 'user' ? 'justify-end' : 'justify-start'
+        ]"
+      >
+        <div
+          :class="[
+            'max-w-3xl rounded-2xl px-6 py-4 shadow-sm',
+            message.role === 'user'
+              ? 'bg-blue-600 text-white ml-12'
+              : 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white mr-12'
+          ]"
+        >
+          <!-- Message Header -->
+          <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center space-x-2">
+              <div class="w-6 h-6 rounded-full bg-white bg-opacity-20 flex items-center justify-center">
+                <component 
+                  :is="message.role === 'user' ? UserIcon : CpuChipIcon" 
+                  class="w-3 h-3"
+                />
+              </div>
+              <span class="text-xs font-medium opacity-75">
+                {{ message.role === 'user' ? 'You' : 'AI Assistant' }}
+              </span>
+            </div>
+            <span class="text-xs opacity-50">
+              {{ formatTime(message.timestamp) }}
+            </span>
+          </div>
+
+          <!-- Message Content -->
+          <MessageContent 
+            :message="message"
+            :is-user="message.role === 'user'"
+            @copy="copyMessage"
+            @regenerate="regenerateMessage"
+          />
+
+          <!-- Message Metadata (for assistant messages) -->
+          <div 
+            v-if="message.role === 'assistant' && message.metadata"
+            class="mt-3 pt-3 border-t border-white border-opacity-20"
+          >
+            <div class="flex items-center justify-between text-xs opacity-75">
+              <div class="flex items-center space-x-4">
+                <span>{{ message.metadata.processing_time?.toFixed(2) }}s</span>
+                <span>{{ message.metadata.token_count }} tokens</span>
+                <span v-if="message.metadata.model_used">{{ message.metadata.model_used }}</span>
+              </div>
+              
+              <!-- Sources (for RAG responses) -->
+              <button
+                v-if="message.metadata.sources && message.metadata.sources.length > 0"
+                @click="showSources(message.metadata.sources)"
+                class="flex items-center space-x-1 hover:underline"
+              >
+                <DocumentIcon class="w-3 h-3" />
+                <span>{{ message.metadata.sources.length }} sources</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Message Actions -->
+          <div 
+            v-if="message.role === 'assistant'"
+            class="flex items-center justify-end space-x-2 mt-3 pt-2 border-t border-white border-opacity-20"
+          >
+            <button
+              @click="copyMessage(message.content)"
+              class="p-1.5 rounded hover:bg-white hover:bg-opacity-20 transition-colors"
+              title="Copy message"
+            >
+              <ClipboardIcon class="w-4 h-4" />
+            </button>
+            
+            <button
+              @click="speakMessage(message.content)"
+              class="p-1.5 rounded hover:bg-white hover:bg-opacity-20 transition-colors"
+              title="Read aloud"
+            >
+              <SpeakerWaveIcon class="w-4 h-4" />
+            </button>
+            
+            <button
+              @click="regenerateMessage(message)"
+              class="p-1.5 rounded hover:bg-white hover:bg-opacity-20 transition-colors"
+              title="Regenerate response"
+            >
+              <ArrowPathIcon class="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Typing Indicator -->
+      <div v-if="isTyping" class="flex justify-start">
+        <div class="bg-gray-100 dark:bg-gray-800 rounded-2xl px-6 py-4 mr-12">
+          <div class="flex items-center space-x-2">
+            <div class="w-6 h-6 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center">
+              <CpuChipIcon class="w-3 h-3 text-white" />
+            </div>
+            <div class="flex space-x-1">
+              <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+              <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.1s"></div>
+              <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+            </div>
           </div>
         </div>
       </div>
     </div>
 
     <!-- Input Area -->
-    <div class="chat-input">
-      <div class="input-container">
-        <div class="flex items-end space-x-2">
-          <!-- File upload -->
-          <label class="file-upload-btn">
-            <input 
-              type="file" 
-              @change="handleFileUpload" 
-              accept=".pdf,.docx,.txt,.png,.jpg,.jpeg"
+    <div class="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-6">
+      <!-- File Attachments Preview -->
+      <div v-if="attachments.length > 0" class="mb-4">
+        <div class="flex flex-wrap gap-2">
+          <div
+            v-for="(attachment, index) in attachments"
+            :key="index"
+            class="flex items-center space-x-2 px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg"
+          >
+            <component :is="getFileIcon(attachment.type)" class="w-4 h-4 text-gray-500" />
+            <span class="text-sm text-gray-700 dark:text-gray-300">{{ attachment.name }}</span>
+            <button
+              @click="removeAttachment(index)"
+              class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+            >
+              <XMarkIcon class="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Input Controls -->
+      <div class="flex items-end space-x-4">
+        <!-- File Upload -->
+        <div class="flex space-x-1">
+          <label class="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer transition-colors">
+            <input
+              type="file"
+              multiple
+              @change="handleFileUpload"
+              accept="image/*,audio/*,.pdf,.docx,.txt,.py,.js,.ts,.java,.cpp,.c,.go,.rs,.php,.rb"
               class="hidden"
             />
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                    d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-            </svg>
+            <PaperClipIcon class="w-5 h-5" />
           </label>
 
-          <!-- Voice input -->
-          <VoiceRecorder @transcript="handleVoiceInput" />
-
-          <!-- Text input -->
-          <div class="flex-1">
-            <textarea
-              v-model="inputMessage"
-              @keydown="handleKeyDown"
-              placeholder="Type your message..."
-              class="textarea textarea-bordered w-full resize-none"
-              rows="1"
-              :disabled="chatStore.loading || chatStore.isTyping"
-            ></textarea>
-          </div>
-
-          <!-- Send button -->
-          <button 
-            @click="sendMessage"
-            :disabled="!inputMessage.trim() || chatStore.loading || chatStore.isTyping"
-            class="btn btn-primary"
+          <button
+            @click="showImageGenerator = !showImageGenerator"
+            class="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            title="Generate image"
           >
-            <svg v-if="!chatStore.loading" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-            </svg>
-            <span v-else class="loading loading-spinner loading-sm"></span>
+            <PhotoIcon class="w-5 h-5" />
+          </button>
+
+          <button
+            @click="showCodeGenerator = !showCodeGenerator"
+            class="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            title="Generate code"
+          >
+            <CodeBracketIcon class="w-5 h-5" />
           </button>
         </div>
 
-        <!-- Input options -->
-        <div v-if="showInputOptions" class="input-options mt-2 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-          <div class="grid grid-cols-2 gap-4">
-            <label class="flex items-center">
-              <input type="checkbox" v-model="useRAG" class="checkbox checkbox-sm" />
-              <span class="ml-2 text-sm">Use uploaded documents</span>
-            </label>
-            <label class="flex items-center">
-              <input type="checkbox" v-model="generateCode" class="checkbox checkbox-sm" />
-              <span class="ml-2 text-sm">Generate code</span>
-            </label>
+        <!-- Voice Input -->
+        <VoiceRecorder
+          @start="handleVoiceStart"
+          @stop="handleVoiceStop"
+          @transcript="handleVoiceInput"
+          :is-recording="isRecording"
+        />
+
+        <!-- Text Input -->
+        <div class="flex-1 relative">
+          <textarea
+            ref="textInput"
+            v-model="inputMessage"
+            @keydown="handleKeyDown"
+            @input="handleInput"
+            placeholder="Type your message... (Shift+Enter for new line)"
+            :disabled="isLoading || isTyping"
+            class="w-full px-4 py-3 pr-12 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 transition-all"
+            :class="{ 'cursor-not-allowed opacity-50': isLoading || isTyping }"
+            rows="1"
+            style="min-height: 48px; max-height: 120px;"
+          ></textarea>
+
+          <!-- Character count -->
+          <div
+            v-if="inputMessage.length > 500"
+            class="absolute bottom-2 right-12 text-xs text-gray-400"
+          >
+            {{ inputMessage.length }}/2000
           </div>
         </div>
-      </div>
-    </div>
 
-    <!-- Settings Modal -->
-    <div v-if="showSettings" class="modal modal-open">
-      <div class="modal-box">
-        <h3 class="font-bold text-lg mb-4">Chat Settings</h3>
-        
-        <ModelSelector 
-          :model-config="settingsStore.modelSettings" 
-          @update="handleSettingsUpdate" 
-        />
-        
-        <div class="modal-action">
-          <button @click="showSettings = false" class="btn">Close</button>
+        <!-- Send Button -->
+        <button
+          @click="sendMessage"
+          :disabled="!canSend || isLoading || isTyping"
+          :class="[
+            'px-4 py-3 rounded-xl font-medium transition-all',
+            canSend && !isLoading && !isTyping
+              ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-md hover:shadow-lg'
+              : 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'
+          ]"
+        >
+          <PaperAirplaneIcon v-if="!isLoading" class="w-5 h-5" />
+          <div v-else class="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+        </button>
+      </div>
+
+      <!-- Quick Actions -->
+      <div class="flex items-center justify-between mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+        <div class="flex items-center space-x-2">
+          <button
+            v-for="action in quickActions"
+            :key="action.name"
+            @click="executeQuickAction(action)"
+            class="px-3 py-1.5 text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+          >
+            {{ action.name }}
+          </button>
+        </div>
+
+        <div class="flex items-center space-x-3 text-xs text-gray-500 dark:text-gray-400">
+          <div class="flex items-center space-x-1">
+            <div :class="['w-2 h-2 rounded-full', connectionStatus === 'connected' ? 'bg-green-500' : 'bg-red-500']"></div>
+            <span>{{ connectionStatus }}</span>
+          </div>
+          <span>{{ messageCount }} / ∞ messages</span>
         </div>
       </div>
+
+      <!-- Expandable Panels -->
+      <ImageGeneratorPanel
+        v-if="showImageGenerator"
+        @close="showImageGenerator = false"
+        @generate="handleImageGeneration"
+      />
+
+      <CodeGeneratorPanel
+        v-if="showCodeGenerator"
+        @close="showCodeGenerator = false"
+        @generate="handleCodeGeneration"
+      />
     </div>
+
+    <!-- Modals -->
+    <SourcesModal
+      v-if="showSourcesModal"
+      :sources="selectedSources"
+      @close="showSourcesModal = false"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick, onMounted, watch } from 'vue'
-import { useChatStore } from '../store/chat'
-import { useSettingsStore } from '../store/settings'
-import VoiceRecorder from './VoiceRecorder.vue'
-import ModelSelector from './ModelSelector.vue'
-import { apiClient } from '../api/client'
+import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
+import { useTextToSpeech } from '@/composables/useTextToSpeech'
+import { useClipboard } from '@/composables/useClipboard'
+import { useAutoResize } from '@/composables/useAutoResize'
+import { useChatStore } from '@/store/chat'
+import { useSettingsStore } from '@/store/settings'
+import { useNotificationStore } from '@/store/notification'
+import { apiClient } from '@/api/client'
 
+// Icons
+import {
+  ChatBubbleLeftRightIcon,
+  UserIcon,
+  CpuChipIcon,
+  SparklesIcon,
+  DocumentMagnifyingGlassIcon,
+  EllipsisVerticalIcon,
+  ClipboardIcon,
+  SpeakerWaveIcon,
+  ArrowPathIcon,
+  PaperClipIcon,
+  PhotoIcon,
+  CodeBracketIcon,
+  PaperAirplaneIcon,
+  XMarkIcon,
+  DocumentIcon,
+  MicrophoneIcon
+} from '@heroicons/vue/24/outline'
+
+// Components
+import MessageContent from './MessageContent.vue'
+import VoiceRecorder from './VoiceRecorder.vue'
+import DropdownMenu from './DropdownMenu.vue'
+import ImageGeneratorPanel from './ImageGeneratorPanel.vue'
+import CodeGeneratorPanel from './CodeGeneratorPanel.vue'
+import SourcesModal from './SourcesModal.vue'
+
+// Props
+interface Props {
+  session?: any
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  session: null
+})
+
+// Emits
+const emit = defineEmits<{
+  message: [content: string, options?: any]
+  'voice-input': [transcript: string]
+  'file-upload': [files: FileList]
+}>()
+
+// Stores
 const chatStore = useChatStore()
 const settingsStore = useSettingsStore()
+const notificationStore = useNotificationStore()
 
-const inputMessage = ref('')
-const showSettings = ref(false)
-const showInputOptions = ref(false)
-const useRAG = ref(false)
-const generateCode = ref(false)
+// Composables
+const { speak, isSupported: ttsSupported } = useTextToSpeech()
+const { copy } = useClipboard()
+
+// Refs
 const messagesContainer = ref<HTMLElement>()
+const textInput = ref<HTMLTextAreaElement>()
 
-// Auto-scroll to bottom when new messages arrive
-watch(() => chatStore.messages.length, () => {
-  nextTick(() => {
-    if (messagesContainer.value) {
-      messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
-    }
-  })
+// State
+const inputMessage = ref('')
+const attachments = ref<File[]>([])
+const isRecording = ref(false)
+const isLoading = ref(false)
+const isTyping = ref(false)
+const ragEnabled = ref(false)
+const showImageGenerator = ref(false)
+const showCodeGenerator = ref(false)
+const showSourcesModal = ref(false)
+const selectedSources = ref<any[]>([])
+const connectionStatus = ref<'connected' | 'connecting' | 'disconnected'>('connected')
+
+// Computed
+const messages = computed(() => chatStore.messages)
+const messageCount = computed(() => messages.value.length)
+const currentModel = computed(() => settingsStore.modelSettings.model_name)
+const canSend = computed(() => {
+  return (inputMessage.value.trim().length > 0 || attachments.value.length > 0) &&
+         inputMessage.value.length <= 2000
 })
 
+const quickSuggestions = [
+  "Explain this concept",
+  "Write code for",
+  "Summarize document",
+  "Generate image"
+]
+
+const quickActions = [
+  { name: "Summarize", action: "summarize" },
+  { name: "Translate", action: "translate" },
+  { name: "Code Review", action: "review" },
+  { name: "Explain", action: "explain" }
+]
+
+// Lifecycle
 onMounted(() => {
-  chatStore.loadSessions()
+  scrollToBottom()
+  textInput.value?.focus()
+  
+  // Auto-resize textarea
+  useAutoResize(textInput)
 })
 
-const sendMessage = async () => {
-  if (!inputMessage.value.trim()) return
+// Watch for new messages
+watch(() => messages.value.length, () => {
+  nextTick(() => scrollToBottom())
+})
 
-  const message = inputMessage.value
-  inputMessage.value = ''
+watch(() => chatStore.isTyping, (typing) => {
+  isTyping.value = typing
+  if (typing) {
+    nextTick(() => scrollToBottom())
+  }
+})
 
-  try {
-    let sessionId = chatStore.currentSessionId
+// Methods
+const scrollToBottom = () => {
+  if (messagesContainer.value) {
+    messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+  }
+}
 
-    // Create new session if none exists
-    if (!sessionId) {
-      const session = await chatStore.createSession()
-      sessionId = session.id
-    }
+const handleScroll = () => {
+  // Implement pagination or scroll-based features
+  const container = messagesContainer.value
+  if (!container) return
+  
+  if (container.scrollTop === 0) {
+    // Load more messages if needed
+    loadMoreMessages()
+  }
+}
 
-    const modelConfig = useRAG.value || generateCode.value 
-      ? { ...settingsStore.modelSettings, use_rag: useRAG.value, generate_code: generateCode.value }
-      : settingsStore.modelSettings
+const loadMoreMessages = async () => {
+  // Implement message pagination
+}
 
-    if (useRAG.value) {
-      // Use RAG query endpoint
-      const response = await apiClient.queryDocuments(message, undefined, modelConfig)
-      
-      // Add user message
-      chatStore.messages.push({
-        role: 'user',
-        content: message,
-        message_type: 'text',
-        timestamp: new Date().toISOString()
-      })
-
-      // Add assistant response with sources
-      chatStore.messages.push({
-        role: 'assistant',
-        content: response.response,
-        message_type: 'text',
-        timestamp: new Date().toISOString(),
-        metadata: {
-          model_used: response.model_used,
-          processing_time: response.processing_time,
-          token_count: response.token_count,
-          sources: response.sources
-        }
-      })
-    } else {
-      await chatStore.sendMessage(message, sessionId, modelConfig)
-    }
-  } catch (error) {
-    console.error('Error sending message:', error)
+// Input Handling
+const handleInput = () => {
+  // Auto-resize textarea
+  if (textInput.value) {
+    textInput.value.style.height = 'auto'
+    textInput.value.style.height = `${Math.min(textInput.value.scrollHeight, 120)}px`
   }
 }
 
@@ -267,161 +513,361 @@ const handleKeyDown = (event: KeyboardEvent) => {
   }
 }
 
-const handleFileUpload = async (event: Event) => {
-  const target = event.target as HTMLInputElement
-  const file = target.files?.[0]
-  if (!file) return
+const sendMessage = async () => {
+  if (!canSend.value) return
+
+  const message = inputMessage.value.trim()
+  const files = [...attachments.value]
+
+  // Clear input immediately for better UX
+  inputMessage.value = ''
+  attachments.value = []
+  
+  // Reset textarea height
+  if (textInput.value) {
+    textInput.value.style.height = '48px'
+  }
 
   try {
-    if (file.type.startsWith('image/')) {
-      // Handle image upload for analysis
-      const reader = new FileReader()
-      reader.onload = async (e) => {
-        const base64 = (e.target?.result as string)?.split(',')[1]
-        if (base64) {
-          const response = await apiClient.analyzeImage(base64, inputMessage.value || 'Describe this image')
-          
-          // Add messages to chat
-          chatStore.messages.push({
-            role: 'user',
-            content: `[Image uploaded: ${file.name}]`,
-            message_type: 'image',
-            timestamp: new Date().toISOString()
-          })
+    isLoading.value = true
 
-          chatStore.messages.push({
-            role: 'assistant',
-            content: response.analysis,
-            message_type: 'text',
-            timestamp: new Date().toISOString(),
-            metadata: {
-              confidence: response.confidence
-            }
-          })
-        }
-      }
-      reader.readAsDataURL(file)
-    } else {
-      // Handle document upload for RAG
-      const response = await apiClient.uploadDocument(file)
-      
-      // Add confirmation message
-      chatStore.messages.push({
-        role: 'assistant',
-        content: `Document "${file.name}" uploaded successfully! It has been processed into ${response.chunks_processed} chunks and is ready for questions.`,
-        message_type: 'text',
-        timestamp: new Date().toISOString()
-      })
-
-      useRAG.value = true
+    // Handle file attachments
+    if (files.length > 0) {
+      await handleAttachedFiles(files)
     }
+
+    // Send message with options
+    const options = {
+      use_rag: ragEnabled.value,
+      temperature: settingsStore.modelSettings.temperature,
+      max_tokens: settingsStore.modelSettings.max_tokens
+    }
+
+    emit('message', message, options)
+
   } catch (error) {
-    console.error('Error handling file upload:', error)
+    console.error('Failed to send message:', error)
+    notificationStore.error('Failed to send message')
+  } finally {
+    isLoading.value = false
+  }
+}
+
+const sendQuickMessage = (suggestion: string) => {
+  inputMessage.value = suggestion
+  nextTick(() => textInput.value?.focus())
+}
+
+// File Handling
+const handleFileUpload = async (event: Event) => {
+  const target = event.target as HTMLInputElement
+  const files = target.files
+  if (!files || files.length === 0) return
+
+  for (const file of Array.from(files)) {
+    if (file.size > 10 * 1024 * 1024) { // 10MB limit
+      notificationStore.error(`File "${file.name}" is too large (max 10MB)`)
+      continue
+    }
+    
+    attachments.value.push(file)
   }
 
   // Reset input
   target.value = ''
 }
 
-const handleVoiceInput = (transcript: string) => {
-  inputMessage.value = transcript
+const handleAttachedFiles = async (files: File[]) => {
+  for (const file of files) {
+    try {
+      if (file.type.startsWith('image/')) {
+        await handleImageFile(file)
+      } else if (file.type.startsWith('audio/')) {
+        await handleAudioFile(file)
+      } else {
+        await handleDocumentFile(file)
+      }
+    } catch (error) {
+      console.error(`Failed to process file ${file.name}:`, error)
+      notificationStore.error(`Failed to process file "${file.name}"`)
+    }
+  }
 }
 
-const toggleSettings = () => {
-  showSettings.value = !showSettings.value
+const handleImageFile = async (file: File) => {
+  // Convert file to base64 string for API
+  const reader = new FileReader()
+  reader.onload = async () => {
+    const imageData = reader.result as string
+    const response = await apiClient.analyzeImage(imageData)
+    notificationStore.success(`Image "${file.name}" analyzed successfully`)
+  }
+  reader.readAsDataURL(file)
+}
+
+const handleAudioFile = async (file: File) => {
+  const response = await apiClient.speechToText(file)
+  inputMessage.value += response.text
+}
+
+const handleDocumentFile = async (file: File) => {
+  const response = await apiClient.uploadDocument(file)
+  ragEnabled.value = true
+  notificationStore.success(`Document "${file.name}" uploaded and indexed for RAG`)
+}
+
+const removeAttachment = (index: number) => {
+  attachments.value.splice(index, 1)
+}
+
+const getFileIcon = (type: string) => {
+  if (type.startsWith('image/')) return PhotoIcon
+  if (type.startsWith('audio/')) return MicrophoneIcon
+  if (type.includes('pdf')) return DocumentIcon
+  return DocumentIcon
+}
+
+// Voice Handling
+const handleVoiceStart = () => {
+  isRecording.value = true
+}
+
+const handleVoiceStop = () => {
+  isRecording.value = false
+}
+
+const handleVoiceInput = (transcript: string) => {
+  inputMessage.value += transcript
+  emit('voice-input', transcript)
+}
+
+// Message Actions
+const copyMessage = async (content: string) => {
+  try {
+    await copy(content)
+    notificationStore.success('Message copied to clipboard')
+  } catch (error) {
+    notificationStore.error('Failed to copy message')
+  }
+}
+
+const speakMessage = async (content: string) => {
+  if (!ttsSupported) {
+    notificationStore.error('Text-to-speech not supported in this browser')
+    return
+  }
+
+  try {
+    await speak(content)
+  } catch (error) {
+    notificationStore.error('Failed to speak message')
+  }
+}
+
+const regenerateMessage = async (message: any) => {
+  try {
+    // Find the user message that triggered this response
+    const messageIndex = messages.value.findIndex(m => m.id === message.id)
+    if (messageIndex > 0) {
+      const userMessage = messages.value[messageIndex - 1]
+      if (userMessage.role === 'user') {
+        // Remove the assistant message and regenerate
+        chatStore.messages.splice(messageIndex, 1)
+        emit('message', userMessage.content)
+      }
+    }
+  } catch (error) {
+    notificationStore.error('Failed to regenerate message')
+  }
+}
+
+const showSources = (sources: any[]) => {
+  selectedSources.value = sources
+  showSourcesModal.value = true
+}
+
+// Quick Actions
+const executeQuickAction = async (action: any) => {
+  let prompt = ''
+  
+  switch (action.action) {
+    case 'summarize':
+      prompt = 'Please provide a concise summary of our conversation.'
+      break
+    case 'translate':
+      prompt = 'Please translate the last message to Spanish.'
+      break
+    case 'review':
+      prompt = 'Please review any code in our conversation and provide feedback.'
+      break
+    case 'explain':
+      prompt = 'Please explain the last concept discussed in simple terms.'
+      break
+  }
+  
+  if (prompt) {
+    inputMessage.value = prompt
+    await sendMessage()
+  }
+}
+
+// Generation Handlers
+const handleImageGeneration = async (prompt: string, options: any) => {
+  try {
+    isLoading.value = true
+    const response = await apiClient.generateImage(prompt, options)
+    
+    // Add image to chat
+    chatStore.messages.push({
+      role: 'assistant',
+      content: `Generated image: "${prompt}"`,
+      message_type: 'image',
+      timestamp: new Date().toISOString(),
+      metadata: {
+        image_data: response.image_data,
+        prompt,
+        ...options
+      }
+    })
+    
+    notificationStore.success('Image generated successfully')
+  } catch (error) {
+    notificationStore.error('Failed to generate image')
+  } finally {
+    isLoading.value = false
+    showImageGenerator.value = false
+  }
+}
+
+const handleCodeGeneration = async (prompt: string, language: string, options: any) => {
+  try {
+    isLoading.value = true
+    const fullPrompt = `Generate ${language} code for: ${prompt}`
+    
+    const generationOptions = {
+      ...options,
+      generate_code: true,
+      language
+    }
+    
+    emit('message', fullPrompt, generationOptions)
+  } catch (error) {
+    notificationStore.error('Failed to generate code')
+  } finally {
+    isLoading.value = false
+    showCodeGenerator.value = false
+  }
+}
+
+// Chat Management
+const exportChat = () => {
+  const chatData = {
+    session: props.session,
+    messages: messages.value,
+    exportDate: new Date().toISOString()
+  }
+  
+  const blob = new Blob([JSON.stringify(chatData, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `chat-${props.session?.name || 'session'}-${new Date().toISOString().split('T')[0]}.json`
+  a.click()
+  URL.revokeObjectURL(url)
+  
+  notificationStore.success('Chat exported successfully')
 }
 
 const clearChat = () => {
-  chatStore.clearMessages()
+  if (confirm('Are you sure you want to clear this chat? This action cannot be undone.')) {
+    chatStore.clearMessages()
+    notificationStore.success('Chat cleared successfully')
+  }
 }
 
-const handleSettingsUpdate = (newSettings: any) => {
-  settingsStore.updateModelSettings(newSettings)
+// Utility Functions
+const formatDate = (dateString: string | undefined) => {
+  if (!dateString) return ''
+  return new Date(dateString).toLocaleDateString()
 }
 
-const formatTime = (timestamp: string | undefined): string => {
+const formatTime = (timestamp: string | undefined) => {
   if (!timestamp) return ''
   return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-}
-
-const formatMessage = (content: string): string => {
-  // Basic markdown-like formatting
-  return content
-    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.*?)\*/g, '<em>$1</em>')
-    .replace(/`(.*?)`/g, '<code class="bg-gray-200 dark:bg-gray-700 px-1 rounded">$1</code>')
-    .replace(/\n/g, '<br>')
 }
 </script>
 
 <style scoped>
-.chat-window {
-  @apply flex flex-col h-full bg-white dark:bg-gray-900;
+/* Custom scrollbar for messages container */
+.overflow-y-auto::-webkit-scrollbar {
+  width: 6px;
 }
 
-.chat-header {
-  @apply flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700;
+.overflow-y-auto::-webkit-scrollbar-track {
+  background: transparent;
 }
 
-.messages-container {
-  @apply flex-1 overflow-y-auto p-4 space-y-4;
+.overflow-y-auto::-webkit-scrollbar-thumb {
+  background: rgb(156 163 175 / 0.5);
+  border-radius: 3px;
+}
+
+.overflow-y-auto::-webkit-scrollbar-thumb:hover {
+  background: rgb(156 163 175 / 0.8);
+}
+
+/* Smooth scrolling */
+.overflow-y-auto {
   scroll-behavior: smooth;
 }
 
-.message-bubble {
-  @apply max-w-3xl p-4 rounded-lg;
+/* Message animations */
+.message-enter-active {
+  transition: all 0.3s ease-out;
 }
 
-.message-bubble.user {
-  @apply bg-blue-600 text-white ml-auto;
+.message-enter-from {
+  opacity: 0;
+  transform: translateY(10px);
 }
 
-.message-bubble.assistant {
-  @apply bg-gray-100 dark:bg-gray-800 mr-auto;
+/* Typing indicator animation */
+@keyframes bounce {
+  0%, 80%, 100% {
+    transform: scale(0);
+  } 40% {
+    transform: scale(1);
+  }
 }
 
-.message-header {
-  @apply flex items-center justify-between mb-2 text-sm opacity-75;
+.animate-bounce {
+  animation: bounce 1.4s infinite ease-in-out both;
 }
 
-.message-content {
-  @apply break-words;
+/* Input focus styles */
+textarea:focus {
+  box-shadow: 0 0 0 3px rgb(59 130 246 / 0.1);
 }
 
-.code-block {
-  @apply bg-gray-900 text-green-400 p-3 rounded overflow-x-auto;
+/* File attachment styles */
+.attachment-preview {
+  transition: all 0.2s ease;
 }
 
-.code-block pre {
-  @apply text-sm font-mono;
+.attachment-preview:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
 }
 
-.message-metadata {
-  @apply mt-3 pt-2 border-t border-gray-200 dark:border-gray-600;
+/* Responsive design */
+@media (max-width: 768px) {
+  .max-w-3xl {
+    max-width: none;
+  }
+  
+  .ml-12, .mr-12 {
+    margin-left: 1rem;
+    margin-right: 1rem;
+  }
 }
-
-.chat-input {
-  @apply p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800;
-}
-
-.file-upload-btn {
-  @apply btn btn-ghost btn-sm cursor-pointer;
-}
-
-.typing-indicator {
-  @apply flex justify-start;
-}
-
-.typing-animation {
-  @apply flex space-x-1;
-}
-
-.typing-animation span {
-  @apply w-2 h-2 bg-gray-400 rounded-full animate-bounce;
-  animation-delay: calc(var(--i) * 0.1s);
-}
-
-.typing-animation span:nth-child(1) { --i: 0; }
-.typing-animation span:nth-child(2) { --i: 1; }
-.typing-animation span:nth-child(3) { --i: 2; }
 </style>
