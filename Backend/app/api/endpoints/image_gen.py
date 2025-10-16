@@ -15,7 +15,6 @@ except ImportError:
     print("Warning: diffusers, torch, or PIL not available. Image generation will be disabled.")
 
 router = APIRouter(
-    prefix="/image",
     tags=["image-generation"]
 )
 
@@ -40,7 +39,7 @@ class ImageGenRequest(BaseModel):
     height: Optional[int] = 512
 
 class ImageGenResponse(BaseModel):
-    image_base64: str
+    image_data: str
 
 @router.post("/generate", response_model=ImageGenResponse)
 async def generate_image(req: ImageGenRequest):
@@ -61,7 +60,7 @@ async def generate_image(req: ImageGenRequest):
         buffered = BytesIO()
         image.save(buffered, format="PNG")
         img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
-        return ImageGenResponse(image_base64=img_str)
+        return ImageGenResponse(image_data=img_str)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Image generation failed: {e}")
     

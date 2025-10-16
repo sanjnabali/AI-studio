@@ -7,7 +7,7 @@ from transformers import (
     pipeline, BertTokenizer, BertForSequenceClassification
 )
 import torch
-from config.settings import settings
+from app.core.config import settings
 import logging
 from abc import ABC, abstractmethod
 
@@ -189,10 +189,18 @@ class LLMService:
         self.models: Dict[str, BaseModel] = {}
         self.model_configs = {
             "chat": ChatModel("microsoft/DialoGPT-medium"),
-            "code": CodeModel("microsoft/CodeBERT-base"),
+            "code": CodeModel("microsoft/CodeGPT-small-py"),
             "summarizer": SummarizerModel("facebook/bart-large-cnn")
         }
         self._loading_lock = asyncio.Lock()
+    
+    async def initialize(self) -> None:
+        """Preload default models asynchronously."""
+        await asyncio.gather(
+            self.get_model("chat"),
+            self.get_model("code"),
+            self.get_model("summarizer")
+        )
     
     async def get_model(self, model_type: str) -> BaseModel:
         if model_type not in self.models:
@@ -214,8 +222,11 @@ class LLMService:
         start_time = time.time()
         
         try:
-            model = await self.get_model(model_type)
-            response = await model.generate(prompt, **kwargs)
+            # Circuit-breaker-like guard: basic timeout using asyncio.wait_for
+            async def _gen():
+                model = await self.get_model(model_type)
+                return await model.generate(prompt, **kwargs)
+            response = await asyncio.wait_for(_gen(), timeout=60)
             
             processing_time = time.time() - start_time
             
@@ -224,15 +235,23 @@ class LLMService:
             
             return {
                 "response": response,
-                "model_used": model.model_name,
+                "model_used": self.models.get(model_type).model_name if self.models.get(model_type) else "unknown",
                 "processing_time": processing_time,
                 "token_count": int(token_count)
             }
             
+        except asyncio.TimeoutError:
+            logger.error("Model generation timed out")
+            return {
+                "response": "The model is taking too long to respond. Please try again with shorter input or lower max tokens.",
+                "model_used": "timeout",
+                "processing_time": time.time() - start_time,
+                "token_count": 0
+            }
         except Exception as e:
             logger.error(f"Error in generate_response: {str(e)}")
             return {
-                "response": f"I apologize, but I encountered an error: {str(e)}",
+                "response": f"I apologize, but I encountered an error while generating a response.",
                 "model_used": "error",
                 "processing_time": time.time() - start_time,
                 "token_count": 0
@@ -261,6 +280,14 @@ class LLMService:
             model_type="chat",
             **model_config
         )
+
+    async def chat(self, *, messages: List[Dict[str, str]], domain: str = "general", temperature: float = 0.7, max_tokens: int = 300) -> (str, int):
+        """Compatibility method for agents: returns (response_text, latency_ms)."""
+        start = time.time()
+        config = {"temperature": temperature, "max_tokens": max_tokens}
+        result = await self.chat_completion(messages, config)
+        latency_ms = int((time.time() - start) * 1000)
+        return result["response"], latency_ms
 
 # Global service instance
 llm_service = LLMService()

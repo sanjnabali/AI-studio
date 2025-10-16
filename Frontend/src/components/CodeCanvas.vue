@@ -480,6 +480,15 @@ import { useSettingsStore } from '@/store/settings'
 import { useNotificationStore } from '@/store/notification'
 import { apiClient, type CodeExecutionResult } from '@/api/client'
 
+// Lightweight debounce utility (avoids pulling in lodash)
+function debounce<T extends (...args: any[]) => void>(fn: T, wait = 300) {
+  let t: any
+  return (...args: Parameters<T>) => {
+    clearTimeout(t)
+    t = setTimeout(() => fn(...args), wait)
+  }
+}
+
 // Icons
 import {
   CodeBracketIcon,
@@ -593,8 +602,14 @@ onMounted(async () => {
   if (props.project) {
     loadProject(props.project)
   }
-  
-  await initializeEditor()
+  // Defer heavy editor initialization to the next frame to keep UI responsive
+  await nextTick()
+  const ric: any = (window as any).requestIdleCallback
+  if (typeof ric === 'function') {
+    ric(async () => { await initializeEditor() }, { timeout: 1500 })
+  } else {
+    window.setTimeout(async () => { await initializeEditor() }, 0)
+  }
   loadAutoSave()
 
   // Auto-save every 30 seconds
@@ -616,23 +631,27 @@ watch(activeFileIndex, (newIndex) => {
 })
 
 // Watch for code content changes
-watch(codeContent, (newContent) => {
+const applyContentChange = (newContent: string) => {
   if (activeFile.value) {
     activeFile.value.content = newContent
     activeFile.value.saved = false
   }
-  
-  // Trigger AI suggestions for certain patterns
   if (settingsStore.experimentSettings.enable_beta_features) {
     checkForAISuggestions(newContent)
   }
+}
+
+const debouncedApplyContentChange = debounce(applyContentChange, 300)
+
+watch(codeContent, (newContent) => {
+  debouncedApplyContentChange(newContent)
 })
 
 // Methods
 const initializeEditor = async () => {
   try {
-    // Try to load Monaco Editor
-    const monaco = await import('monaco-editor')
+    // Try to load Monaco Editor (esm api to reduce payload)
+    const monaco = await import('monaco-editor/esm/vs/editor/editor.api')
     
     if (editorContainer.value) {
       monacoEditor.value = monaco.editor.create(editorContainer.value, {
@@ -650,10 +669,11 @@ const initializeEditor = async () => {
         insertSpaces: true
       })
       
-      // Listen for content changes
-      monacoEditor.value.onDidChangeModelContent(() => {
+      // Listen for content changes (debounced to avoid reactivity floods)
+      const onChange = debounce(() => {
         codeContent.value = monacoEditor.value.getValue()
-      })
+      }, 200)
+      monacoEditor.value.onDidChangeModelContent(onChange)
       
       // Listen for cursor position changes
       monacoEditor.value.onDidChangeCursorPosition((e: any) => {

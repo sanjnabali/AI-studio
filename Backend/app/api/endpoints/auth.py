@@ -189,11 +189,14 @@ async def login(login_data: UserLogin, db: Session = Depends(get_db)):
             detail="Internal server error during login"
         )
 
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
+
 @router.post("/refresh", response_model=TokenResponse)
-async def refresh_token(refresh_token: str, db: Session = Depends(get_db)):
+async def refresh_token(request: RefreshTokenRequest, db: Session = Depends(get_db)):
     """Refresh access token"""
     try:
-        payload = security_manager.verify_token(refresh_token, token_type="refresh")
+        payload = security_manager.verify_token(request.refresh_token, token_type="refresh")
         user_id = payload.get("sub")
         
         user = db.query(User).filter(User.id == int(user_id)).first()

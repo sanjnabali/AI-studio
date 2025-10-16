@@ -2,9 +2,10 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import path from 'path'
+import compression from 'vite-plugin-compression'
 
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [vue(), compression({ algorithm: 'gzip', threshold: 10240 })],
   resolve: {
     alias: {
        "@": path.resolve(__dirname, "./src"),

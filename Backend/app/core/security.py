@@ -11,7 +11,7 @@ except Exception:
         pass
 from passlib.context import CryptContext
 from fastapi import HTTPException, status
-from config.settings import settings
+from app.core.config import settings
 import secrets
 import bcrypt
 

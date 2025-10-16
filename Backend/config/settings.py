@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     DEBUG: bool = Field(default=False)
 
     # Security
-    SECRET_KEY: str = Field(default="dev-secret-key")
+    SECRET_KEY: str = Field(default="dev-secret-key-please-change-32-characters-minimum-1234")
     ALGORITHM: str = Field(default="HS256")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=30)
     REFRESH_TOKEN_EXPIRE_DAYS: int = Field(default=7)

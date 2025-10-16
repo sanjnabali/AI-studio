@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     # Security
     SECRET_KEY: str = "your-super-secret-key-change-in-production"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     ALGORITHM: str = "HS256"
     
     # CORS Settings
@@ -43,7 +44,9 @@ class Settings(BaseSettings):
         "http://localhost:3000",
         "http://localhost:3001", 
         "http://127.0.0.1:3000",
-        "https://localhost:3000"
+        "https://localhost:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173"
     ]
     
     @validator("BACKEND_CORS_ORIGINS", pre=True)
@@ -68,9 +71,12 @@ class Settings(BaseSettings):
     REQUEST_TIMEOUT_SECONDS: int = 300
     MODEL_LOADING_TIMEOUT: int = 600
     RESPONSE_CACHE_TTL: int = 300  # 5 minutes
+    PRELOAD_ON_STARTUP: bool = False
     
     # File Upload Limits
     MAX_FILE_SIZE_MB: int = 50
+    MAX_FILE_SIZE: int = 50 * 1024 * 1024
+    UPLOAD_FOLDER: str = "uploads"
     MAX_AUDIO_DURATION_SECONDS: int = 600  # 10 minutes
     ALLOWED_AUDIO_EXTENSIONS: List[str] = [".wav", ".mp3", ".m4a", ".ogg", ".webm"]
     ALLOWED_DOCUMENT_EXTENSIONS: List[str] = [".txt", ".pdf", ".docx", ".md", ".json"]
@@ -83,6 +89,7 @@ class Settings(BaseSettings):
     
     # RAG Configuration
     RAG_STORAGE_DIR: str = "/app/rag_storage"
+    CHROMA_DB_PATH: str = "rag_storage"
     RAG_CHUNK_SIZE: int = 500
     RAG_CHUNK_OVERLAP: int = 50
     RAG_TOP_K: int = 5
@@ -96,11 +103,12 @@ class Settings(BaseSettings):
     # Image Generation
     IMAGE_GENERATION_ENABLED: bool = False
     STABLE_DIFFUSION_MODEL: str = "runwayml/stable-diffusion-v1-5"
+    EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
     MAX_IMAGE_WIDTH: int = 1024
     MAX_IMAGE_HEIGHT: int = 1024
     
     # Database Settings (optional)
-    DATABASE_URL: Optional[str] = None
+    DATABASE_URL: Optional[str] = "sqlite:///./ai_studio.db"
     REDIS_URL: Optional[str] = None
     
     # Logging Configuration

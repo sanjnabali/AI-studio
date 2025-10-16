@@ -4,7 +4,7 @@ import asyncio
 import hashlib
 from typing import List, Dict, Any, Optional
 import logging
-from config.settings import settings
+from app.core.config import settings
 
 # Disable ChromaDB telemetry before importing
 os.environ["CHROMADB_DISABLE_TELEMETRY"] = "true"
@@ -253,10 +253,14 @@ class RAGEngine:
             # Get all user collections if no specific documents specified
             if not document_names:
                 all_collections = self.chroma_client.list_collections()
-                user_collections = [
-                    col for col in all_collections 
-                    if col.metadata and col.metadata.get("user_id") == user_id
-                ]
+                if user_id is None or user_id == -1:
+                    # Search across all collections (no user filter)
+                    user_collections = all_collections
+                else:
+                    user_collections = [
+                        col for col in all_collections 
+                        if col.metadata and str(col.metadata.get("user_id")) == str(user_id)
+                    ]
             else:
                 user_collections = []
                 for doc_name in document_names:
@@ -296,6 +300,36 @@ class RAGEngine:
             logger.error(f"Error searching documents: {str(e)}")
             return []
     
+    async def get_context_for_query(self, query: str, max_context_length: int = 1500) -> str:
+        """Build a textual context string for a query by retrieving top similar chunks."""
+        results = await self.search_documents(query=query, user_id=-1, top_k=5)  # user_id should be set by caller if needed
+        context = []
+        total_len = 0
+        for r in results:
+            text = r.get("text", "")
+            if not text:
+                continue
+            if total_len + len(text) > max_context_length:
+                text = text[: max(0, max_context_length - total_len)]
+            context.append(text)
+            total_len += len(text)
+            if total_len >= max_context_length:
+                break
+        return "\n\n".join(context)
+    
+    async def query(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
+        """Return list of chunks similar to the query with content, metadata and similarity."""
+        # This method is user-agnostic; callers can filter by collections if needed
+        results = await self.search_documents(query=query, user_id=-1, top_k=top_k)
+        formatted = []
+        for r in results:
+            formatted.append({
+                "content": r.get("text", ""),
+                "metadata": r.get("metadata", {}),
+                "similarity_score": 1 - r.get("distance", 1)
+            })
+        return formatted
+    
     async def get_user_documents(self, user_id: int) -> List[Dict[str, Any]]:
         """Get all documents for a user"""
         try:
@@ -303,7 +337,7 @@ class RAGEngine:
             user_docs = []
             
             for collection in all_collections:
-                if collection.metadata and collection.metadata.get("user_id") == user_id:
+                if collection.metadata and (user_id is None or str(collection.metadata.get("user_id")) == str(user_id)):
                     doc_info = {
                         "collection_name": collection.name,
                         "document_name": collection.metadata.get("document_name", "Unknown"),

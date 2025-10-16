@@ -59,26 +59,26 @@ export default {
   ],
   daisyui: {
     themes: [
-      "light",
-      "dark",
       {
-        aistudio: {
-          "primary": "#ff6a1a",
-          "primary-focus": "#e65c17",
-          "primary-content": "#fff7ed",
-          "secondary": "#fbc2e3",
-          "accent": "#e0117a",
-          "neutral": "#44403c",
-          "base-100": "#fff7ed",
-          "base-200": "#ffe4d5",
-          "base-300": "#ffd6b5",
-          "base-content": "#4d1d09",
-          "info": "#ff924e",
-          "success": "#10b981",
-          "warning": "#f59e0b",
-          "error": "#ef4444",
+        aistudioDark: {
+          "primary": "#00AEEF",
+          "primary-focus": "#0096CC",
+          "primary-content": "#001018",
+          "secondary": "#7F8EA3",
+          "accent": "#5CE1E6",
+          "neutral": "#1E232A",
+          "base-100": "#0D1117",
+          "base-200": "#161B22",
+          "base-300": "#1F2630",
+          "base-content": "#E6EDF3",
+          "info": "#00AEEF",
+          "success": "#00C853",
+          "warning": "#FFAB00",
+          "error": "#EF4444",
         }
-      }
+      },
+      "dark",
+      "light"
     ],
   },
   darkMode: ['class', '[data-theme="dark"]']

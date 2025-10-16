@@ -8,11 +8,11 @@ import os
 import uuid
 
 from ...models.user import User, Document
-from ...services.rag_engine import RAGEngine
+from ...services.rag_engine import rag_engine, RAGEngine
 from ...services.llm import llm_service
 from ...api.deps import get_current_user
 from ...core.database import get_db
-from config.settings import settings
+from ...core.config import settings
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -45,8 +45,7 @@ class DocumentInfo(BaseModel):
 async def upload_document(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-    rag_engine: RAGEngine = Depends(RAGEngine)
+    db: Session = Depends(get_db)
 ):
     """Upload and process a document for RAG"""
     try:
@@ -183,8 +182,7 @@ async def get_user_documents(
 async def rag_query(
     request: RAGRequest,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-    rag_engine: RAGEngine = Depends(RAGEngine)
+    db: Session = Depends(get_db)
 ):
     """Query documents using RAG"""
     try:

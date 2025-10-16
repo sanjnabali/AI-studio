@@ -169,9 +169,9 @@ class CodeAgent(BaseAgent):
     async def initialize(self) -> bool:
         """Initialize the code agent"""
         try:
-            # Ensure LLM service is initialized
-            if not llm_service.model:
-                await llm_service.initialize()
+            # Ensure LLM service is initialized and code model is loaded
+            await llm_service.initialize()
+            await llm_service.get_model("code")
             
             self.status = AgentStatus.IDLE
             logger.info("Code agent initialized successfully")
@@ -309,8 +309,8 @@ class TextAgent(BaseAgent):
     async def initialize(self) -> bool:
         """Initialize the text agent"""
         try:
-            if not llm_service.model:
-                await llm_service.initialize()
+            await llm_service.initialize()
+            await llm_service.get_model("chat")
             
             self.status = AgentStatus.IDLE
             logger.info("Text agent initialized successfully")
@@ -468,11 +468,8 @@ class RAGAgent(BaseAgent):
     async def initialize(self) -> bool:
         """Initialize the RAG agent"""
         try:
-            if not llm_service.model:
-                await llm_service.initialize()
-            
-            if not self.rag_engine.embedding_model:
-                await self.rag_engine.initialize()
+            await llm_service.initialize()
+            await self.rag_engine.initialize()
             
             self.status = AgentStatus.IDLE
             logger.info("RAG agent initialized successfully")
@@ -544,36 +541,12 @@ class RAGAgent(BaseAgent):
         document_ids = input_data.get("document_ids", [])
         analysis_focus = input_data.get("focus", "general insights")
         
-        # Retrieve document contents
-        documents = []
-        for doc_id in document_ids:
-            if doc_id in self.rag_engine.documents:
-                documents.append(self.rag_engine.documents[doc_id].content)
-        
-        if not documents:
-            return {"error": "No documents found"}
-        
-        combined_content = "\n\n".join(documents[:5])  # Limit to 5 docs
-        
-        messages = [
-            {
-                "role": "user",
-                "content": f"Analyze the following documents and provide insights focusing on: {analysis_focus}\n\nDocuments:\n{combined_content}"
-            }
-        ]
-        
-        response, latency = await llm_service.chat(
-            messages=messages,
-            domain="analysis", 
-            temperature=0.4,
-            max_tokens=500
-        )
-        
+        # Currently insufficient context to map SQL document IDs to vector store.
         return {
-            "analysis": response,
-            "documents_analyzed": len(documents),
+            "error": "insufficient context",
+            "details": "Document analysis requires mapping DB document IDs to vector store collections.",
+            "documents_analyzed": 0,
             "focus": analysis_focus,
-            "latency_ms": latency
         }
     
     async def _synthesize_knowledge(self, input_data: Dict[str, Any]) -> Dict[str, Any]:

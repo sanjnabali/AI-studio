@@ -224,7 +224,8 @@ export const useSettingsStore = defineStore('settings', () => {
     // Apply theme classes
     root.classList.add(appliedTheme)
     body.classList.add(appliedTheme)
-    root.setAttribute('data-theme', appliedTheme)
+    // Use DaisyUI custom theme name when dark
+    root.setAttribute('data-theme', appliedTheme === 'dark' ? 'aistudioDark' : 'light')
 
     // Update CSS custom properties for theme
     if (appliedTheme === 'dark') {

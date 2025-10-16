@@ -20,14 +20,14 @@ class ChatMessage(BaseModel):
     role: MessageRole
     content: str
     message_type: MessageType = MessageType.TEXT
-    metadata: Optional[Dict[str, Any]] = {}
+    metadata: Dict[str, Any] = Field(default_factory=dict)
     timestamp: datetime = Field(default_factory=datetime.utcnow)
 
 class ChatRequest(BaseModel):
     message: str
     session_id: Optional[int] = None
-    model_options: Optional[Dict[str, Any]] = {}
-    context_files: Optional[List[str]] = []
+    model_options: Dict[str, Any] = Field(default_factory=dict)
+    context_files: List[str] = Field(default_factory=list)
 
 class ChatResponse(BaseModel):
     message: str

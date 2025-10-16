@@ -1,14 +1,15 @@
 # Backend/app/core/database.py
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
-from config.settings import settings
-from ..models.user import Base
+from app.core.config import settings
+from app.models.user import Base
 import logging
 
 logger = logging.getLogger(__name__)
 
 # Database setup
-engine = create_engine(settings.DATABASE_URL, connect_args={"check_same_thread": False} if "sqlite" in settings.DATABASE_URL else {})
+db_url = settings.DATABASE_URL or "sqlite:///./ai_studio.db"
+engine = create_engine(db_url, connect_args={"check_same_thread": False} if "sqlite" in db_url else {})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 # Create tables

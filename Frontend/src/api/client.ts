@@ -24,7 +24,7 @@ export interface ChatSession {
   created_at: string
   updated_at: string
   message_count: number
-  model_config: Record<string, any>
+  model_options: Record<string, any>
 }
 
 export interface User {
@@ -106,13 +106,15 @@ class ApiClient {
   private accessToken: string | null = null
   private refreshToken: string | null = null
 
-  constructor(baseURL: string = 'http://localhost:8000') {
+  constructor(baseURL: string = (import.meta as any)?.env?.VITE_API_BASE_URL || '') {
+    // If baseURL is empty string, axios will use relative URLs like /api/... which works with Vite proxy and same-origin deployments.
     this.client = axios.create({
       baseURL,
-      timeout: 30000,
+      timeout: 20000,
       headers: {
         'Content-Type': 'application/json',
       },
+      withCredentials: false,
     })
 
     // Load tokens from localStorage
@@ -134,6 +136,13 @@ class ApiClient {
     this.client.interceptors.response.use(
       (response) => response,
       async (error: AxiosError) => {
+        // Normalize network errors
+        if (error.code === 'ECONNABORTED') {
+          return Promise.reject(new Error('Request timed out'))
+        }
+        if (!error.response) {
+          return Promise.reject(new Error('Network error. Please check your connection.'))
+        }
         if (error.response?.status === 401 && this.refreshToken) {
           try {
             const refreshResponse = await this.client.post('/api/auth/refresh', {
@@ -202,13 +211,14 @@ class ApiClient {
     await this.client.put('/api/auth/preferences', preferences)
   }
 
-  async updateProfile(profileData: { name: string; email: string }): Promise<{ user: User }> {
-    const response = await this.client.put<{ user: User }>('/api/auth/profile', profileData)
+  async updateProfile(full_name: string): Promise<User> {
+    const response = await this.client.put<User>('/api/auth/me', null, { params: { full_name } })
     return response.data
   }
 
+  // changePassword endpoint not available on backend; keep a stub to inform callers.
   async changePassword(passwordData: { currentPassword: string; newPassword: string }): Promise<void> {
-    await this.client.put('/api/auth/change-password', passwordData)
+    return Promise.reject(new Error('changePassword is not implemented on the server'))
   }
 
   // Chat endpoints
@@ -217,10 +227,10 @@ class ApiClient {
     return response.data
   }
 
-  async createChatSession(name?: string, modelConfig?: Record<string, any>): Promise<ChatSession> {
+  async createChatSession(name?: string, modelOptions?: Record<string, any>): Promise<ChatSession> {
     const response = await this.client.post<ChatSession>('/api/chat/sessions', {
       name,
-      model_config: modelConfig
+      model_options: modelOptions
     })
     return response.data
   }
@@ -241,7 +251,7 @@ class ApiClient {
     const response = await this.client.post('/api/chat/chat', {
       message,
       session_id: sessionId,
-      model_config: modelConfig
+      model_options: modelConfig
     })
     return response.data
   }
@@ -293,7 +303,7 @@ class ApiClient {
     const response = await this.client.post('/api/rag/query', {
       query,
       document_names: documentNames,
-      model_config: modelConfig
+      model_options: modelConfig
     })
     return response.data
   }
@@ -370,7 +380,7 @@ class ApiClient {
       language,
       complexity,
       include_tests: includeTests,
-      model_config: modelConfig
+      model_options: modelConfig
     })
     return response.data
   }

@@ -16,7 +16,10 @@
   /* Light theme */
   --color-background: 249 250 251;
   --color-foreground: 17 24 39;
-  --color-primary: 59 130 246;
+  /* Google Blue */
+--color-primary: 0 174 239; /* #00AEEF */
+  --color-success: 0 200 83;   /* #00C853 */
+  --color-warning: 255 171 0;  /* #FFAB00 */
   --color-secondary: 107 114 128;
   --color-accent: 147 51 234;
   --color-muted: 156 163 175;
@@ -41,18 +44,18 @@
 /* Dark theme */
 @media (prefers-color-scheme: dark) {
   :root {
-    --color-background: 17 24 39;
-    --color-foreground: 249 250 251;
-    --color-secondary: 156 163 175;
-    --color-muted: 107 114 128;
+    --color-background: 18 18 18; /* #121212 */
+    --color-foreground: 245 245 245; /* near white */
+    --color-secondary: 176 176 176;
+    --color-muted: 120 120 120;
   }
 }
 
 .dark {
-  --color-background: 17 24 39;
-  --color-foreground: 249 250 251;
-  --color-secondary: 156 163 175;
-  --color-muted: 107 114 128;
+  --color-background: 18 18 18; /* #121212 */
+  --color-foreground: 245 245 245;
+  --color-secondary: 176 176 176;
+  --color-muted: 120 120 120;
 }
 
 /* Base styles */

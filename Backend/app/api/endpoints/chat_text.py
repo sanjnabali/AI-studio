@@ -12,6 +12,8 @@ from sqlalchemy import func, case
 from ...services.llm import llm_service
 from ...api.deps import get_current_user
 from ...core.database import get_db
+from fastapi.responses import StreamingResponse
+import json
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -138,7 +140,7 @@ async def get_session_messages(
                 role=msg.role,
                 content=msg.content,
                 message_type=msg.message_type,
-                metadata=msg.metadata,
+                metadata=msg.message_metadata,
                 created_at=msg.created_at.isoformat(),
                 token_count=msg.token_count
             )
@@ -190,7 +192,7 @@ async def chat_completion(
             role=MessageRole.USER.value,
             content=request.message,
             message_type=MessageType.TEXT.value,
-            metadata={},
+            message_metadata={},
             token_count=len(request.message.split())
         )
         db.add(user_message)
@@ -237,6 +239,8 @@ async def chat_completion(
         db.add(assistant_message)
         
         # Update usage stats
+        if current_user.usage_stats is None:
+            current_user.usage_stats = {"total_requests": 0, "total_tokens": 0, "last_request": None}
         current_user.usage_stats["total_requests"] += 1
         current_user.usage_stats["total_tokens"] += llm_response["token_count"]
         current_user.usage_stats["last_request"] = time.time()
@@ -262,6 +266,35 @@ async def chat_completion(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error processing chat request: {str(e)}"
         )
+
+@router.post("/stream")
+async def chat_stream(
+    request: ChatRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Stream assistant response in chunks via SSE.
+    Note: This is a best-effort stream based on full completion for now.
+    """
+    try:
+        # Reuse completion path but stream chunks
+        llm = await llm_service.generate_response(
+            prompt=request.message,
+            model_type="chat",
+            **(request.model_options or {})
+        )
+        text = llm.get("response", "")
+
+        async def event_gen():
+            chunk_size = 64
+            for i in range(0, len(text), chunk_size):
+                data = json.dumps({"delta": text[i:i+chunk_size]})
+                yield f"data: {data}\n\n"
+            yield "event: done\n" + "data: {}\n\n"
+        return StreamingResponse(event_gen(), media_type="text/event-stream")
+    except Exception as e:
+        logger.error(f"Stream error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to stream response")
 
 @router.delete("/sessions/{session_id}")
 async def delete_chat_session(

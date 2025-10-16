@@ -101,13 +101,14 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  async function updateProfile(profileData: { name: string; email: string }): Promise<boolean> {
+  async function updateProfile(profileData: { name: string; email?: string }): Promise<boolean> {
     loading.value = true
     error.value = null
 
     try {
-      const response = await apiClient.updateProfile(profileData)
-      user.value = response.user
+      // Backend supports updating full_name only
+      const updatedUser = await apiClient.updateProfile(profileData.name)
+      user.value = updatedUser
       return true
     } catch (err: any) {
       error.value = err.response?.data?.detail || 'Failed to update profile'

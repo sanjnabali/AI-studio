@@ -80,7 +80,7 @@ watch(
 )
 
 // Methods
-function switchMode(mode: 'login' | 'register' | 'forgot') {
+function switchMode(mode: any) {
   console.log('🔄 AUTH VIEW: Switching auth mode to:', mode)
   currentMode.value = mode
   authStore.clearError()

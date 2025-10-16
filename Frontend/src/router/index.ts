@@ -31,65 +31,101 @@ const Auth = () => import('../views/auth.vue').catch(err => {
 })
 
 const routes: Array<RouteRecordRaw> = [
+  // Auth
   {
     path: '/auth',
     name: 'auth',
     component: Auth,
-    meta: { 
-      requiresGuest: true,
-      title: 'Sign In - AI Studio',
-      description: 'Sign in to your AI Studio account'
-    }
+    meta: { requiresGuest: true, title: 'Sign In - AI Studio', description: 'Sign in to your AI Studio account' }
   },
+
+  // Dashboard (default)
   {
     path: '/',
-    name: 'studio',
-    component: Studio,
-    meta: { 
-      requiresAuth: true,
-      title: 'AI Studio - Your AI Workspace',
-      description: 'Multimodal AI workspace for coding, analysis, and creative writing'
-    }
+    name: 'dashboard',
+    component: () => import('../views/Dashboard.vue'),
+    meta: { requiresAuth: true, title: 'Dashboard - AI Studio', description: 'Overview of your AI Studio' }
   },
+
+  // AI Playground (chat)
   {
-    path: '/templates',
-    name: 'templates', 
-    component: Templates,
-    meta: { 
-      requiresAuth: true,
-      title: 'Templates - AI Studio',
-      description: 'Pre-built templates to get you started quickly'
-    }
+    path: '/playground',
+    name: 'playground',
+    component: () => import('../views/Playground.vue'),
+    meta: { requiresAuth: true, title: 'AI Playground - AI Studio', description: 'Multimodal chat and interactions' }
   },
+
+  // RAG Studio
+  {
+    path: '/rag',
+    name: 'rag',
+    component: () => import('../views/RAGStudio.vue'),
+    meta: { requiresAuth: true, title: 'RAG Studio - AI Studio', description: 'Document uploads and intelligent querying' }
+  },
+
+  // Code Canvas
+  {
+    path: '/code-canvas',
+    name: 'code-canvas',
+    component: () => import('../views/CodeCanvasView.vue'),
+    meta: { requiresAuth: true, title: 'Code Canvas - AI Studio', description: 'Live code generation and execution' }
+  },
+
+  // Voice Lab
+  {
+    path: '/voice-lab',
+    name: 'voice-lab',
+    component: () => import('../views/VoiceLab.vue'),
+    meta: { requiresAuth: true, title: 'Voice Lab - AI Studio', description: 'Speech-to-text and text-to-speech' }
+  },
+
+  // Vision AI
+  {
+    path: '/vision-ai',
+    name: 'vision-ai',
+    component: () => import('../views/VisionAI.vue'),
+    meta: { requiresAuth: true, title: 'Vision AI - AI Studio', description: 'Image understanding and captioning' }
+  },
+
+  // Model Configurator
+  {
+    path: '/model-config',
+    name: 'model-config',
+    component: () => import('../views/ModelConfigurator.vue'),
+    meta: { requiresAuth: true, title: 'Model Configurator - AI Studio', description: 'Fine-tune model parameters' }
+  },
+
+  // Sessions
+  {
+    path: '/sessions',
+    name: 'sessions',
+    component: () => import('../views/Sessions.vue'),
+    meta: { requiresAuth: true, title: 'Sessions - AI Studio', description: 'History of past conversations and experiments' }
+  },
+
+  // Security Center
+  {
+    path: '/security',
+    name: 'security',
+    component: () => import('../views/SecurityCenter.vue'),
+    meta: { requiresAuth: true, title: 'Security Center - AI Studio', description: 'Manage API tokens and credentials' }
+  },
+
+  // Settings
   {
     path: '/settings',
     name: 'settings',
     component: Settings,
-    meta: { 
-      requiresAuth: true,
-      title: 'Settings - AI Studio',
-      description: 'Manage your account and application preferences'
-    }
+    meta: { requiresAuth: true, title: 'System Settings - AI Studio', description: 'Application preferences' }
   },
-  // Redirect old routes
-  {
-    path: '/login',
-    redirect: '/auth'
-  },
-  {
-    path: '/register',
-    redirect: '/auth'
-  },
-  {
-    path: '/home',
-    redirect: '/'
-  },
-  // Catch-all route for 404s
-  {
-    path: '/:pathMatch(.*)*',
-    name: 'not-found',
-    redirect: '/auth'
-  }
+
+  // Redirect legacy
+  { path: '/login', redirect: '/auth' },
+  { path: '/register', redirect: '/auth' },
+  { path: '/home', redirect: '/' },
+
+  // Catch-all
+  { path: '/:pathMatch(.*)*', name: 'not-found', redirect: '/auth' }
 ]
 
 const router = createRouter({
