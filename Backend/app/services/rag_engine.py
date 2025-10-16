@@ -337,7 +337,7 @@ class RAGEngine:
                                   user_id: int,
                                   llm_service,
                                   document_names: Optional[List[str]] = None,
-                                  model_config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+                                  model_options: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Generate response using RAG"""
         try:
             # Search for relevant documents
@@ -381,13 +381,13 @@ Answer based on the provided context. If the context doesn't contain enough info
 Answer:"""
             
             # Generate response using LLM
-            if model_config is None:
-                model_config = {}
-            
+            if model_options is None:
+                model_options = {}
+
             llm_response = await llm_service.generate_response(
                 rag_prompt, 
                 model_type="chat",
-                **model_config
+                **model_options
             )
             
             # Combine with RAG metadata

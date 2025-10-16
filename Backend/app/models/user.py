@@ -44,7 +44,8 @@ class ChatSession(Base):
     session_name = Column(String(255), default="New Chat")
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
-    model_config = Column(JSON, default=lambda: {})
+    # Renamed to avoid conflicts with Pydantic reserved names when used in FastAPI/Pydantic models
+    model_options = Column(JSON, default=lambda: {})
     is_archived = Column(Boolean, default=False)
 
 class ChatMessage(Base):

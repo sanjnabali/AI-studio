@@ -7,17 +7,18 @@ import logging
 import time
 
 from app.models.user import User, ChatSession, ChatMessage as DBChatMessage
-from app.models.chat import ChatRequest, ChatResponse, MessageRole, MessageType
-from app.services.llm import llm_service
-from app.api.deps import get_current_user
-from app.core.database import get_db
+from ...models.chat import ChatRequest, ChatResponse, MessageRole, MessageType
+from sqlalchemy import func, case
+from ...services.llm import llm_service
+from ...api.deps import get_current_user
+from ...core.database import get_db
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 class ChatSessionCreate(BaseModel):
     name: Optional[str] = "New Chat"
-    model_config: Optional[Dict[str, Any]] = {}
+    model_options: Optional[Dict[str, Any]] = {}
 
 class ChatSessionResponse(BaseModel):
     id: int
@@ -25,7 +26,7 @@ class ChatSessionResponse(BaseModel):
     created_at: str
     updated_at: str
     message_count: int
-    model_config: Dict[str, Any]
+    model_options: Dict[str, Any]
 
 class MessageResponse(BaseModel):
     id: int
@@ -47,7 +48,7 @@ async def create_chat_session(
         new_session = ChatSession(
             user_id=current_user.id,
             session_name=session_data.name,
-            model_config=session_data.model_config or current_user.model_preferences
+            model_options=session_data.model_options or current_user.model_preferences
         )
         
         db.add(new_session)
@@ -60,7 +61,7 @@ async def create_chat_session(
             created_at=new_session.created_at.isoformat(),
             updated_at=new_session.updated_at.isoformat(),
             message_count=0,
-            model_config=new_session.model_config
+            model_options=new_session.model_options
         )
         
     except Exception as e:
@@ -78,26 +79,26 @@ async def get_chat_sessions(
 ):
     """Get all chat sessions for the current user"""
     try:
-        sessions = db.query(ChatSession).filter(
+        # Optimized query to get sessions and message counts in one go
+        sessions_with_counts = db.query(
+            ChatSession,
+            func.count(case((DBChatMessage.session_id == ChatSession.id, DBChatMessage.id))).label("message_count")
+        ).outerjoin(DBChatMessage, DBChatMessage.session_id == ChatSession.id).filter(
             ChatSession.user_id == current_user.id,
             ChatSession.is_archived == False
-        ).order_by(ChatSession.updated_at.desc()).all()
+        ).group_by(ChatSession.id).order_by(ChatSession.updated_at.desc()).all()
         
         session_responses = []
-        for session in sessions:
-            message_count = db.query(DBChatMessage).filter(
-                DBChatMessage.session_id == session.id
-            ).count()
-            
+        for session, message_count in sessions_with_counts:
             session_responses.append(ChatSessionResponse(
                 id=session.id,
                 name=session.session_name,
                 created_at=session.created_at.isoformat(),
                 updated_at=session.updated_at.isoformat(),
                 message_count=message_count,
-                model_config=session.model_config
+                model_options=session.model_options
             ))
-        
+
         return session_responses
         
     except Exception as e:
@@ -176,7 +177,7 @@ async def chat_completion(
             session = ChatSession(
                 user_id=current_user.id,
                 session_name="New Chat",
-                model_config=request.model_config or current_user.model_preferences
+                model_options=request.model_options or current_user.model_preferences
             )
             db.add(session)
             db.commit()
@@ -211,13 +212,13 @@ async def chat_completion(
             "content": request.message
         })
         
-        # Merge model config with user preferences
-        model_config = {**current_user.model_preferences, **(request.model_config or {})}
+        # Merge model options with user preferences
+        model_options = {**current_user.model_preferences, **(request.model_options or {})}
         
         # Generate response
         llm_response = await llm_service.chat_completion(
             conversation_history,
-            model_config
+            model_options
         )
         
         # Save assistant message

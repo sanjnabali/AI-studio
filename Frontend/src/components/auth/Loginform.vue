@@ -1,45 +1,45 @@
 <!-- src/components/auth/LoginForm.vue - Enhanced with Debug Logging -->
 <template>
-  <div class="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
+  <div class="min-h-screen bg-white flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
     <div class="max-w-md w-full space-y-8">
-      <div>
-        <div class="mx-auto h-12 w-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
+      <!-- Logo and Header -->
+      <div class="text-center">
+        <div class="mx-auto h-16 w-16 bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 rounded-2xl flex items-center justify-center shadow-lg">
           <SparklesIcon class="h-8 w-8 text-white" />
         </div>
-        <h2 class="mt-6 text-center text-3xl font-extrabold text-gray-900 dark:text-white">
-          Sign in to AI Studio
-        </h2>
-        <p class="mt-2 text-center text-sm text-gray-600 dark:text-gray-400">
-          Or
-          <button
-            @click="$emit('switch-mode', 'register')"
-            class="font-medium text-blue-600 hover:text-blue-500 dark:text-blue-400"
-          >
-            create a new account
-          </button>
+        <h1 class="mt-6 text-3xl font-bold text-gray-900 tracking-tight">
+          Welcome back
+        </h1>
+        <p class="mt-2 text-sm text-gray-600">
+          Sign in to your AI Studio account
         </p>
       </div>
 
       <form class="mt-8 space-y-6" @submit.prevent="handleLogin">
-        <div class="rounded-md shadow-sm space-y-4">
+        <div class="space-y-5">
+          <!-- Email Field -->
           <div>
-            <label for="email" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Email address
+            <label for="email" class="block text-sm font-medium text-gray-700 mb-2">
+              Email
             </label>
-            <input
-              id="email"
-              v-model="form.email"
-              name="email"
-              type="email"
-              autocomplete="email"
-              required
-              class="appearance-none relative block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white bg-white dark:bg-gray-800 rounded-lg focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-              placeholder="Enter your email"
-              :disabled="authStore.loading"
-            />
+            <div class="relative">
+              <input
+                id="email"
+                v-model="form.email"
+                name="email"
+                type="email"
+                autocomplete="email"
+                required
+                class="block w-full px-4 py-3 border border-gray-300 rounded-xl shadow-sm placeholder-gray-400 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 hover:border-gray-400"
+                placeholder="Enter your email"
+                :disabled="authStore.loading"
+              />
+            </div>
           </div>
+
+          <!-- Password Field -->
           <div>
-            <label for="password" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label for="password" class="block text-sm font-medium text-gray-700 mb-2">
               Password
             </label>
             <div class="relative">
@@ -50,22 +50,22 @@
                 :type="showPassword ? 'text' : 'password'"
                 autocomplete="current-password"
                 required
-                class="appearance-none relative block w-full px-3 py-2 pr-10 border border-gray-300 dark:border-gray-600 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white bg-white dark:bg-gray-800 rounded-lg focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
+                class="block w-full px-4 py-3 pr-12 border border-gray-300 rounded-xl shadow-sm placeholder-gray-400 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 hover:border-gray-400"
                 placeholder="Enter your password"
                 :disabled="authStore.loading"
               />
               <button
                 type="button"
                 @click="showPassword = !showPassword"
-                class="absolute inset-y-0 right-0 pr-3 flex items-center"
+                class="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
               >
                 <EyeIcon
                   v-if="!showPassword"
-                  class="h-4 w-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                  class="h-5 w-5"
                 />
                 <EyeSlashIcon
                   v-else
-                  class="h-4 w-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                  class="h-5 w-5"
                 />
               </button>
             </div>
@@ -81,7 +81,7 @@
               type="checkbox"
               class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
             />
-            <label for="remember-me" class="ml-2 block text-sm text-gray-900 dark:text-gray-300">
+            <label for="remember-me" class="ml-2 block text-sm text-gray-700">
               Remember me
             </label>
           </div>
@@ -90,27 +90,14 @@
             <button
               type="button"
               @click="$emit('switch-mode', 'forgot')"
-              class="font-medium text-blue-600 hover:text-blue-500 dark:text-blue-400"
+              class="font-medium text-blue-600 hover:text-blue-500"
             >
               Forgot your password?
             </button>
           </div>
         </div>
 
-        <!-- Debug Info (Development Only) -->
-        <div v-if="isDev" class="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3 text-xs">
-          <div class="font-semibold text-yellow-800 dark:text-yellow-200 mb-2">Debug Info:</div>
-          <div class="space-y-1 text-yellow-700 dark:text-yellow-300">
-            <div>Auth Loading: {{ authStore.loading }}</div>
-            <div>Auth Initialized: {{ authStore.isInitialized }}</div>
-            <div>Is Authenticated: {{ authStore.isAuthenticated }}</div>
-            <div>Has User: {{ !!authStore.user }}</div>
-            <div>Has Token: {{ !!authStore.token }}</div>
-            <div>LocalStorage Token: {{ localStorageToken }}</div>
-            <div>LocalStorage User: {{ localStorageUser }}</div>
-            <div>Current Route: {{ $route.path }}</div>
-          </div>
-        </div>
+
 
         <!-- Error Display -->
         <div v-if="authStore.error" class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
@@ -145,30 +132,7 @@
           </button>
         </div>
 
-        <!-- Debug Actions (Development Only) -->
-        <div v-if="isDev" class="flex space-x-2">
-          <button
-            type="button"
-            @click="forceNavigation"
-            class="flex-1 px-3 py-2 text-xs bg-yellow-500 text-white rounded hover:bg-yellow-600"
-          >
-            Force Navigate
-          </button>
-          <button
-            type="button"
-            @click="clearAllStorage"
-            class="flex-1 px-3 py-2 text-xs bg-red-500 text-white rounded hover:bg-red-600"
-          >
-            Clear Storage
-          </button>
-          <button
-            type="button"
-            @click="logDebugInfo"
-            class="flex-1 px-3 py-2 text-xs bg-blue-500 text-white rounded hover:bg-blue-600"
-          >
-            Log Debug
-          </button>
-        </div>
+
 
         <!-- Social Login Options -->
         <div class="mt-6">

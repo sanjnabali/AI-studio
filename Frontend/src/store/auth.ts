@@ -62,12 +62,23 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  // Add debounce time for API calls
+  const lastUserFetch = ref<number>(0)
+  const USER_FETCH_DEBOUNCE_MS = 5000 // 5 seconds
+
   async function getCurrentUser(): Promise<void> {
     if (!token.value) return
+    
+    // Check if we've fetched the user recently
+    const now = Date.now()
+    if (userLoaded.value && (now - lastUserFetch.value < USER_FETCH_DEBOUNCE_MS)) {
+      return
+    }
 
     try {
       user.value = await apiClient.getCurrentUser()
       userLoaded.value = true
+      lastUserFetch.value = now
     } catch (err) {
       console.error('Failed to get current user:', err)
       user.value = null

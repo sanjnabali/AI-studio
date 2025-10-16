@@ -1,7 +1,4 @@
 # # Backend/app/main.py
-
-
-
 from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -59,6 +56,14 @@ async def lifespan(app: FastAPI):
         # Shutdown
         logger.info("Shutting down AI Studio application...")
 
+# Import rate limiter
+from fastapi import Request
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+
+# Create rate limiter
+limiter = Limiter(key_func=get_remote_address)
+
 # Create FastAPI app
 app = FastAPI(
     title=settings.APP_NAME,
@@ -67,10 +72,13 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+# Add rate limiter to app state
+app.state.limiter = limiter
+
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -98,7 +106,7 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
             )
         
         # Get user from database
-        from Backend.app.models.user import User
+        from .models.user import User
         user = db.query(User).filter(User.id == user_id).first()
         
         if user is None or not user.is_active:

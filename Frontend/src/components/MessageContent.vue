@@ -13,14 +13,14 @@
         :alt="message.content"
         class="max-w-full rounded-lg shadow-sm"
       />
-      <div v-else class="text-gray-500 italic">
+      <div v-else class="text-[#b34713] dark:text-[#ffd6b5] italic">
         {{ message.content }}
       </div>
     </div>
 
     <!-- Code content -->
     <div v-else-if="message.message_type === 'code'" class="code-message">
-      <pre class="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg overflow-x-auto"><code>{{ message.content }}</code></pre>
+      <pre class="bg-[#fff7ed] dark:bg-[#292524] p-4 rounded-xl border border-[#ffd6b5] dark:border-[#44403c] shadow-lg overflow-x-auto backdrop-blur-sm"><code class="text-[#b34713] dark:text-[#ffd6b5]">{{ message.content }}</code></pre>
     </div>
 
     <!-- Default content -->

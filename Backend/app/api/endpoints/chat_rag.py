@@ -7,11 +7,12 @@ import logging
 import os
 import uuid
 
-from app.models.user import User, Document
-from app.services.rag_engine import rag_engine
-from app.services.llm import llm_service
-from app.api.deps import get_current_user
-from app.core.database import get_db
+from ...models.user import User, Document
+from ...services.rag_engine import RAGEngine
+from ...services.llm import llm_service
+from ...api.deps import get_current_user
+from ...core.database import get_db
+from config.settings import settings
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -19,7 +20,7 @@ router = APIRouter()
 class RAGRequest(BaseModel):
     query: str
     document_names: Optional[List[str]] = None
-    model_config: Optional[Dict[str, Any]] = {}
+    model_options: Optional[Dict[str, Any]] = {}
     session_id: Optional[int] = None
 
 class RAGResponse(BaseModel):
@@ -44,7 +45,8 @@ class DocumentInfo(BaseModel):
 async def upload_document(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    rag_engine: RAGEngine = Depends(RAGEngine)
 ):
     """Upload and process a document for RAG"""
     try:
@@ -181,23 +183,26 @@ async def get_user_documents(
 async def rag_query(
     request: RAGRequest,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    rag_engine: RAGEngine = Depends(RAGEngine)
 ):
     """Query documents using RAG"""
     try:
-        # Merge model config with user preferences
-        model_config = {**current_user.model_preferences, **(request.model_config or {})}
-        
+        # Merge model options with user preferences
+        model_options = {**current_user.model_preferences, **(request.model_options or {})}
+
         # Generate RAG response
         rag_response = await rag_engine.generate_rag_response(
             request.query,
             current_user.id,
             llm_service,
             request.document_names,
-            model_config
+            model_options
         )
         
         # Update usage stats
+        if current_user.usage_stats is None:
+            current_user.usage_stats = {"total_requests": 0, "total_tokens": 0}
         current_user.usage_stats["total_requests"] += 1
         current_user.usage_stats["total_tokens"] += rag_response["token_count"]
         db.commit()
@@ -222,7 +227,8 @@ async def rag_query(
 async def delete_document(
     document_id: int,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    rag_engine: RAGEngine = Depends(RAGEngine)
 ):
     """Delete a document"""
     try:

@@ -7,10 +7,10 @@ from typing import Optional
 from datetime import datetime
 import logging
 
-from app.core.security import security_manager, validate_password
-from app.models.user import User
-from app.core.database import get_db
-from app.api.deps import get_current_user
+from ...core.security import security_manager, validate_password
+from ...models.user import User
+from ...core.database import get_db
+from ...api.deps import get_current_user
 
 logger = logging.getLogger(__name__)
 router = APIRouter()

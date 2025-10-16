@@ -20,9 +20,9 @@ import base64
 import threading
 import asyncio
 
-from app.models.user import User
-from app.api.deps import get_current_user
-from app.core.database import get_db
+from ...models.user import User
+from ...api.deps import get_current_user
+from ...core.database import get_db
 
 logger = logging.getLogger(__name__)
 router = APIRouter()

@@ -99,43 +99,48 @@ const logout = async () => {
   padding: 0.75rem 0;
 }
 
-.navbar-container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 0 1rem;
+
+.user-menu-trigger {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.25rem 0.75rem;
+  border: 1px solid #ffd6b5;
+  border-radius: 0.75rem;
+  background: rgba(255, 244, 232, 0.7);
+  cursor: pointer;
+  box-shadow: 0 2px 8px #ffd6b5;
+  transition: all 0.2s;
 }
-
-.navbar-brand {
-  display: flex;
-  align-items: center;
+.user-menu-trigger:hover {
+  border-color: #ff6a1a;
 }
-
-.navbar-logo {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  text-decoration: none;
-  color: #111827;
-  font-weight: 600;
-  font-size: 1.125rem;
-}
-
-.logo-icon {
+.user-avatar {
+  width: 2.25rem;
+  height: 2.25rem;
+  background: linear-gradient(135deg, #e0117a 0%, #ff6a1a 100%);
+  color: #fff7ed;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 2rem;
-  height: 2rem;
-  background: #eff6ff;
-  border-radius: 0.5rem;
+  font-size: 1rem;
+  font-weight: 700;
+  box-shadow: 0 2px 8px #ffd6b5;
 }
-
-.navbar-menu {
+.dropdown-item {
   display: flex;
-  gap: 2rem;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  color: #b34713;
+  cursor: pointer;
+  border-radius: 0.5rem;
+  transition: background 0.2s, color 0.2s;
+}
+.dropdown-item:hover {
+  background: #ffe4d5;
+  color: #ff6a1a;
 }
 
 .navbar-link {

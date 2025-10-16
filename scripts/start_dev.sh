@@ -3,7 +3,9 @@
 # Start development environment
 
 echo "Starting AI Studio development environment..."
-
+# --- BACKEND SETUP ---
+echo "Setting up backend..."
+cd ../backend || { echo "Backend folder not found!"; exit 1; }
 # Check if Python is installed
 if ! command -v python3 &> /dev/null; then
     echo "Python 3 is not installed. Please install Python 3.8 or higher."
@@ -29,6 +31,7 @@ fi
 source venv/bin/activate
 
 # Install Python dependencies
+pip install --upgrade pip
 pip install -r requirements.txt
 
 # Create necessary directories
@@ -42,7 +45,7 @@ fi
 
 # Start backend in background
 echo "Starting backend server..."
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload &
+PYTHONPATH=. uvicorn --app-dir Backend app.main:app --host 0.0.0.0 --port 8000 --reload &
 BACKEND_PID=$!
 
 # Setup frontend

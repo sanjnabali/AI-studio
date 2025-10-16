@@ -2,7 +2,7 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from config.settings import settings
-from app.models.user import Base
+from ..models.user import Base
 import logging
 
 logger = logging.getLogger(__name__)

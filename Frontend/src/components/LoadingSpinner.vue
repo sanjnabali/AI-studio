@@ -30,9 +30,10 @@ defineProps<Props>()
 }
 
 .spinner {
-  border: 2px solid #e5e7eb;
-  border-top: 2px solid #3b82f6;
+  border: 2px solid rgba(255, 214, 181, 0.5);
+  border-top: 2px solid #ff6a1a;
   border-radius: 50%;
+  filter: drop-shadow(0 0 8px rgba(255, 106, 26, 0.2));
   animation: spin 1s linear infinite;
 }
 
@@ -43,6 +44,7 @@ defineProps<Props>()
 
 .spinner-text {
   font-size: 0.875rem;
-  color: #6b7280;
+  color: #b34713;
+  text-shadow: 0 1px 4px rgba(255, 106, 26, 0.1);
 }
 </style>

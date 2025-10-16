@@ -1,31 +1,46 @@
 # Backend/config/settings.py
 import os
-from typing import List, Optional
+from typing import List, Optional, Any
 from pydantic_settings import BaseSettings
-from pydantic import Field
+from pydantic import Field, field_validator
+import json
 
 class Settings(BaseSettings):
     # App Configuration
-    APP_NAME: str = "AI Studio"
-    VERSION: str = "1.0.0"
-    DEBUG: bool = False
+    APP_NAME: str = Field(default="AI Studio")
+    VERSION: str = Field(default="1.0.0")
+    DEBUG: bool = Field(default=False)
 
     # Security
-    SECRET_KEY: str = Field(..., env="SECRET_KEY")
-    ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
-    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    SECRET_KEY: str = Field(default="dev-secret-key")
+    ALGORITHM: str = Field(default="HS256")
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=30)
+    REFRESH_TOKEN_EXPIRE_DAYS: int = Field(default=7)
 
     # Database
-    DATABASE_URL: str = Field("sqlite:///./ai_studio.db", env="DATABASE_URL")
+    DATABASE_URL: str = Field(default="sqlite:///./ai_studio.db")
 
-    # CORS - Allow comma-separated strings from env
-    ALLOWED_HOSTS: List[str] = Field(default=["*"])
-    CORS_ORIGINS: List[str] = Field(default=[
-        "http://localhost:3000",
-        "http://localhost:5173",
-        "http://127.0.0.1:5173"
-    ])
+    # CORS Configuration
+    ALLOWED_HOSTS: str = Field(default="*")
+    CORS_ORIGINS: str = Field(default="http://localhost:3000,http://localhost:5173,http://127.0.0.1:5173")
+
+    @property
+    def allowed_hosts(self) -> List[str]:
+        if self.ALLOWED_HOSTS == "*":
+            return ["*"]
+        return [h.strip() for h in self.ALLOWED_HOSTS.split(",") if h.strip()]
+
+    @property
+    def cors_origins(self) -> List[str]:
+        default_origins = [
+            "http://localhost:3000",
+            "http://localhost:5173",
+            "http://127.0.0.1:5173"
+        ]
+        if not self.CORS_ORIGINS:
+            return default_origins
+        origins = [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
+        return origins if origins else default_origins
 
     # Model Configuration
     DEFAULT_MODEL: str = "microsoft/DialoGPT-medium"

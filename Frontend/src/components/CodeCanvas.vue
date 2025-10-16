@@ -1,23 +1,33 @@
-<!-- Frontend/src/components/code/CodeCanvas.vue -->
 <template>
-  <div class="flex flex-col h-full bg-white dark:bg-gray-900">
+  <div class="flex flex-col h-full bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 min-h-screen">
     <!-- Toolbar -->
-    <div class="flex items-center justify-between px-6 py-3 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+    <div class="flex items-center justify-between px-6 py-4 bg-white/80 dark:bg-gray-800/80 backdrop-blur-lg border-b border-orange-200/50 dark:border-gray-700/50 shadow-sm">
       <div class="flex items-center space-x-4">
         <!-- Project Info -->
-        <div class="flex items-center space-x-2">
-          <div class="w-8 h-8 bg-gradient-to-r from-green-500 to-blue-600 rounded-lg flex items-center justify-center">
-            <CodeBracketIcon class="w-4 h-4 text-white" />
+        <div class="flex items-center space-x-3 group">
+          <div class="w-10 h-10 bg-gradient-to-r from-green-500 via-blue-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg group-hover:shadow-xl transition-all duration-300 hover:scale-105">
+            <CodeBracketIcon class="w-5 h-5 text-white" />
           </div>
-          <div>
+          <div class="flex-1">
             <input
               v-model="projectName"
               @blur="saveProject"
-              class="text-lg font-semibold bg-transparent border-none focus:outline-none focus:ring-2 focus:ring-blue-500 rounded px-2 py-1 text-gray-900 dark:text-white"
+              class="text-xl font-bold bg-transparent border-none focus:outline-none focus:ring-2 focus:ring-orange-400 rounded-lg px-3 py-2 text-gray-900 dark:text-white transition-all duration-200 hover:bg-white/10"
+              placeholder="Project Name"
             />
-            <p class="text-xs text-gray-500 dark:text-gray-400">
-              {{ formatFileSize(codeContent.length) }} • {{ getLineCount() }} lines
-            </p>
+            <div class="flex items-center space-x-4 mt-1">
+              <p class="text-sm text-gray-600 dark:text-gray-300 font-medium">
+                {{ formatFileSize(codeContent.length) }}
+              </p>
+              <span class="text-gray-400">•</span>
+              <p class="text-sm text-gray-600 dark:text-gray-300 font-medium">
+                {{ getLineCount() }} lines
+              </p>
+              <div class="flex items-center space-x-1">
+                <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                <span class="text-xs text-green-600 dark:text-green-400 font-medium">Active</span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -25,7 +35,7 @@
         <select
           v-model="selectedLanguage"
           @change="onLanguageChange"
-          class="px-3 py-1.5 text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white"
+          class="px-3 py-1.5 text-sm bg-[#fff7ed] dark:bg-[#292524] border border-[#ffd6b5] dark:border-[#44403c] rounded-lg focus:ring-2 focus:ring-[#ff6a1a] text-[#b34713] dark:text-[#ffd6b5]"
         >
           <option v-for="lang in availableLanguages" :key="lang" :value="lang">
             {{ lang.charAt(0).toUpperCase() + lang.slice(1) }}
@@ -58,26 +68,25 @@
         </button>
 
         <!-- Share/Export -->
-        <DropdownMenu>
-          <template slot = #trigger>
-            <button class="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700">
+          <DropdownMenu>
+            <button 
+              slot="trigger"
+              class="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+            >
               <ShareIcon class="w-5 h-5" />
             </button>
-          </template>
-          <template slot = #content>
-            <button @click="exportCode" class="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700">
-              Export Code
-            </button>
-            <button @click="shareProject" class="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700">
-              Share Project
-            </button>
-            <button @click="generateAPI" class="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700">
-              Generate API
-            </button>
-          </template>
-        </DropdownMenu>
-
-        <!-- Run/Execute -->
+            <div slot="content">
+              <button @click="exportCode" class="w-full text-left px-4 py-2 text-sm hover:bg-[#ffe4d5] dark:hover:bg-[#292524]">
+                Export Code
+              </button>
+              <button @click="shareProject" class="w-full text-left px-4 py-2 text-sm hover:bg-[#ffe4d5] dark:hover:bg-[#292524]">
+                Share Project
+              </button>
+              <button @click="generateAPI" class="w-full text-left px-4 py-2 text-sm hover:bg-[#ffe4d5] dark:hover:bg-[#292524]">
+                Generate API
+              </button>
+            </div>
+        </DropdownMenu>        <!-- Run/Execute -->
         <button
           @click="executeCode"
           :disabled="isExecuting || !codeContent.trim()"
@@ -104,13 +113,13 @@
           <div class="flex space-x-1">
             <div
               v-for="(file, index) in openFiles"
-              :key="file.name"
-              :class="[
-                'flex items-center space-x-2 px-3 py-1.5 rounded-lg text-sm cursor-pointer transition-all',
-                activeFileIndex === index
-                  ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700'
-              ]"
+              :key="file.name" 
+              :class="{
+                'flex items-center space-x-2 px-3 py-1.5 rounded-lg text-sm cursor-pointer transition-all relative': true,
+                'bg-orange-50 text-orange-800 shadow-sm': activeFileIndex === index,
+                'text-gray-600 hover:text-gray-900 hover:bg-orange-50/50': activeFileIndex !== index,
+                'unsaved': !file.saved
+              }"
               @click="activeFileIndex = index"
             >
               <component :is="getLanguageIcon(file.language)" class="w-4 h-4" />
@@ -159,7 +168,7 @@
               v-model="codeContent"
               @input="onCodeChange"
               @keydown="handleEditorKeydown"
-              class="flex-1 p-4 bg-white dark:bg-gray-900 border-none resize-none focus:outline-none font-mono text-sm text-gray-900 dark:text-gray-100"
+              class="flex-1 p-4 bg-[#fff7ed] dark:bg-[#292524] border-none resize-none focus:outline-none font-mono text-sm text-[#b34713] dark:text-[#ffd6b5]"
               placeholder="Start coding here..."
               spellcheck="false"
               :style="{ tabSize: 2 }"
@@ -169,7 +178,7 @@
           <!-- AI Code Suggestions Overlay -->
           <div
             v-if="aiSuggestion && showAISuggestion"
-            class="absolute top-4 right-4 max-w-md bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-4 z-10"
+            class="absolute top-4 right-4 max-w-md bg-[#fff7ed] dark:bg-[#292524] border border-[#ffd6b5] dark:border-[#44403c] rounded-xl shadow-lg p-4 z-10"
           >
             <div class="flex items-start justify-between mb-2">
               <div class="flex items-center space-x-2">
@@ -343,7 +352,7 @@
       <!-- AI Assistant Panel -->
       <div
         v-if="showAIAssistant"
-        class="w-80 bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 flex flex-col"
+        class="w-80 bg-[#fff7ed] dark:bg-[#292524] border-l border-[#ffd6b5] dark:border-[#44403c] flex flex-col shadow-xl"
       >
         <div class="p-4 border-b border-gray-200 dark:border-gray-700">
           <div class="flex items-center justify-between mb-4">
@@ -355,6 +364,7 @@
               <XMarkIcon class="w-5 h-5" />
             </button>
           </div>
+        
 
           <!-- AI Actions -->
           <div class="grid grid-cols-2 gap-2">
@@ -429,12 +439,12 @@
           <!-- AI Input -->
           <div class="p-4 border-t border-gray-200 dark:border-gray-700">
             <div class="flex space-x-2">
-              <input
-                v-model="aiInput"
-                @keydown.enter="sendAIMessage"
-                placeholder="Ask about your code..."
-                class="flex-1 px-3 py-2 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-900 dark:text-white"
-              />
+          <input
+            v-model="aiInput"
+            @keydown.enter="sendAIMessage"
+            placeholder="Ask about your code..."
+            class="flex-1 px-3 py-2 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-900 dark:text-white"
+          />
               <button
                 @click="sendAIMessage"
                 :disabled="!aiInput.trim() || aiTyping"
@@ -493,7 +503,7 @@ import {
 } from '@heroicons/vue/24/outline'
 
 // Components
-import DropdownMenu from '../DropdownMenu.vue'
+import DropdownMenu from './DropdownMenu.vue'
 import VersionHistoryModal from './VersionHistoryModal.vue'
 import NewFileModal from './NewFileModal.vue'
 
@@ -518,6 +528,7 @@ const notificationStore = useNotificationStore()
 
 // Refs
 const editorContainer = ref<HTMLElement>()
+const autoSaveInterval = ref<ReturnType<typeof setInterval> | null>(null)
 
 // State
 const projectName = ref('Untitled Project')
@@ -568,6 +579,16 @@ const codeLines = computed(() => codeContent.value.split('\n'))
 const activeFile = computed(() => openFiles.value[activeFileIndex.value])
 
 // Lifecycle
+// Cleanup function
+onUnmounted(() => {
+  if (autoSaveInterval.value) {
+    clearInterval(autoSaveInterval.value)
+  }
+  if (monacoEditor.value) {
+    monacoEditor.value.dispose()
+  }
+})
+
 onMounted(async () => {
   if (props.project) {
     loadProject(props.project)
@@ -575,16 +596,9 @@ onMounted(async () => {
   
   await initializeEditor()
   loadAutoSave()
-  
+
   // Auto-save every 30 seconds
-  const autoSaveInterval = setInterval(autoSave, 30000)
-  
-  onUnmounted(() => {
-    clearInterval(autoSaveInterval)
-    if (monacoEditor.value) {
-      monacoEditor.value.dispose()
-    }
-  })
+  autoSaveInterval.value = setInterval(autoSave, 30000)
 })
 
 // Watch for active file changes

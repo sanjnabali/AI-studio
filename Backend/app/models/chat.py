@@ -26,7 +26,7 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     message: str
     session_id: Optional[int] = None
-    model_config: Optional[Dict[str, Any]] = {}
+    model_options: Optional[Dict[str, Any]] = {}
     context_files: Optional[List[str]] = []
 
 class ChatResponse(BaseModel):

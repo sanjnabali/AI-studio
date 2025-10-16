@@ -21,13 +21,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, defineComponent } from 'vue'
+
+
 
 interface Props {
   position?: 'bottom-left' | 'bottom-right' | 'top-left' | 'top-right'
 }
 
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  position: 'bottom-left'
+})
 
 const isOpen = ref(false)
 const dropdownRef = ref<HTMLElement>()
@@ -66,32 +70,35 @@ onUnmounted(() => {
   align-items: center;
   gap: 0.5rem;
   padding: 0.5rem 0.75rem;
-  border: 1px solid #d1d5db;
-  border-radius: 0.375rem;
-  background: white;
-  color: #374151;
+  border: 1px solid #ffd6b5;
+  border-radius: 0.75rem;
+  background: rgba(255, 244, 232, 0.7);
+  color: #b34713;
   font-size: 0.875rem;
+  box-shadow: 0 2px 8px #ffd6b5;
+  backdrop-filter: blur(8px);
   transition: all 0.2s;
 }
 
 .dropdown-trigger:hover {
-  background: #f9fafb;
-  border-color: #9ca3af;
+  background: rgba(255, 214, 181, 0.3);
+  border-color: #ff6a1a;
 }
 
 .dropdown-trigger--open {
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  border-color: #ff6a1a;
+  box-shadow: 0 0 0 3px rgba(255, 106, 26, 0.1);
 }
 
 .dropdown-content {
   position: absolute;
   z-index: 50;
   margin-top: 0.25rem;
-  background: white;
-  border: 1px solid #d1d5db;
-  border-radius: 0.375rem;
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  background: rgba(255, 244, 232, 0.85);
+  border: 1px solid #ffd6b5;
+  border-radius: 0.75rem;
+  box-shadow: 0 8px 32px rgba(255, 106, 26, 0.12);
+  backdrop-filter: blur(12px);
   min-width: 12rem;
   padding: 0.25rem 0;
 }

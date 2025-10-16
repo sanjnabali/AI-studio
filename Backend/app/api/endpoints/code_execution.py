@@ -19,10 +19,10 @@ import docker
 import uuid
 from pathlib import Path
 
-from app.models.user import User, CodeExecution
-from app.services.llm import llm_service
-from app.api.deps import get_current_user
-from app.core.database import get_db
+from ...models.user import User, CodeExecution
+from ...services.llm import llm_service
+from ...api.deps import get_current_user
+from ...core.database import get_db
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -47,7 +47,8 @@ class CodeGenerationRequest(BaseModel):
     language: str = "python"
     complexity: str = "simple"  # simple, intermediate, advanced
     include_tests: bool = False
-    model_config: Optional[Dict[str, Any]] = {}
+    # Renamed to avoid Pydantic reserved `model_config` name
+    model_options: Optional[Dict[str, Any]] = {}
 
 class CodeGenerationResponse(BaseModel):
     code: str
@@ -96,132 +97,78 @@ class CodeExecutor:
         """Execute Python code securely"""
         try:
             # Create secure temp directory
-            temp_dir = self._create_secure_environment()
-            
-            # Create Python file with security restrictions
-            secure_code = f'''
+            temp_dir_path = self._create_secure_environment()
+
+            # The user's code will be executed inside this wrapper
+            # to provide some sandboxing and capture output.
+            secure_wrapper_code = f'''
 import sys
 import os
-import signal
 import time
 from io import StringIO
 import contextlib
-
-# Security restrictions
 import builtins
-
-# Disable dangerous functions
-restricted_builtins = {{
-    'open': lambda *args, **kwargs: None,
-    'input': lambda *args: inputs.pop(0) if inputs else "",
-    '__import__': lambda name, *args, **kwargs: __import__(name, *args, **kwargs) if name in allowed_modules else None,
-    'exec': lambda *args: None,
-    'eval': lambda *args: None,
-    'compile': lambda *args: None,
-    'exit': lambda *args: None,
-    'quit': lambda *args: None,
-}}
-
-allowed_modules = {{
-    'math', 'random', 'datetime', 'json', 're', 'collections',
-    'itertools', 'functools', 'operator', 'string', 'decimal',
-    'fractions', 'statistics', 'numpy', 'pandas', 'matplotlib'
-}}
+import json
 
 # Input data for interactive programs
 inputs = {json.dumps(inputs)}
 
-# Redirect stdout
-old_stdout = sys.stdout
-sys.stdout = captured_output = StringIO()
+# Override input to read from the predefined list
+original_input = builtins.input
+def safe_input(prompt=""):
+    if not inputs:
+        return ""
+    return inputs.pop(0)
+builtins.input = safe_input
 
-# Set resource limits
-start_time = time.time()
+# --- User code starts here ---
 
-try:
-    # Execute user code
-{code}
-    
-    execution_time = int((time.time() - start_time) * 1000)
-    output = captured_output.getvalue()
-    
-    print("__EXECUTION_SUCCESS__")
-    print(f"__EXECUTION_TIME__{execution_time}__")
-    
-except Exception as e:
-    execution_time = int((time.time() - start_time) * 1000)
-    print("__EXECUTION_ERROR__")
-    print(f"__ERROR_MESSAGE__{str(e)}__")
-    print(f"__EXECUTION_TIME__{execution_time}__")
-    
-finally:
-    sys.stdout = old_stdout
+@contextlib.contextmanager
+def stdout_redirector(stream):
+    old_stdout = sys.stdout
+    sys.stdout = stream
+    try:
+        yield
+    finally:
+        sys.stdout = old_stdout
+
+output_capture = StringIO()
+with stdout_redirector(output_capture):
+    try:
+        exec({json.dumps(code)})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+
+sys.stdout.write(output_capture.getvalue())
+
+# --- User code ends here ---
 '''
-            
-            code_file = os.path.join(temp_dir, "user_code.py")
-            with open(code_file, 'w') as f:
-                f.write(secure_code)
-            
-            # Execute with restrictions
-            cmd = [
-                sys.executable, "-c", f"""
-import subprocess
-import sys
-import os
-os.chdir('{temp_dir}')
-result = subprocess.run([sys.executable, 'user_code.py'], 
-                       capture_output=True, text=True, timeout={timeout})
-print(result.stdout)
-if result.stderr:
-    print("STDERR:", result.stderr)
-"""
-            ]
-            
+            code_file_path = os.path.join(temp_dir_path, "user_code.py")
+            with open(code_file_path, 'w', encoding='utf-8') as f:
+                f.write(secure_wrapper_code)
+
             start_time = time.time()
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+            process = subprocess.run(
+                [sys.executable, code_file_path],
+                capture_output=True, text=True, timeout=timeout, cwd=temp_dir_path
+            )
             execution_time = int((time.time() - start_time) * 1000)
-            
-            # Parse output
-            output_lines = result.stdout.strip().split('\n')
-            
-            if "__EXECUTION_SUCCESS__" in result.stdout:
-                # Extract execution time
-                exec_time_line = [line for line in output_lines if "__EXECUTION_TIME__" in line]
-                if exec_time_line:
-                    exec_time = int(exec_time_line[0].split("__EXECUTION_TIME__")[1].split("__")[0])
-                else:
-                    exec_time = execution_time
-                
-                # Clean output
-                clean_output = '\n'.join([line for line in output_lines 
-                                        if not line.startswith('__')])
-                
+
+            if process.returncode == 0:
                 return {
-                    "output": clean_output,
-                    "error": None,
-                    "execution_time": exec_time,
+                    "output": process.stdout,
+                    "error": process.stderr or None,
+                    "execution_time": execution_time,
                     "status": "success",
                     "memory_used": None
                 }
-            
-            elif "__EXECUTION_ERROR__" in result.stdout:
-                error_lines = [line for line in output_lines if "__ERROR_MESSAGE__" in line]
-                error_msg = error_lines[0].split("__ERROR_MESSAGE__")[1].split("__")[0] if error_lines else "Unknown error"
-                
-                return {
-                    "output": None,
-                    "error": error_msg,
-                    "execution_time": execution_time,
-                    "status": "error",
-                    "memory_used": None
-                }
-            
             else:
                 return {
-                    "output": result.stdout if result.returncode == 0 else None,
-                    "error": result.stderr if result.returncode != 0 else None,
+                    "output": process.stdout,
+                    "error": process.stderr or "Code execution failed with a non-zero exit code.",
                     "execution_time": execution_time,
-                    "status": "success" if result.returncode == 0 else "error",
+                    "status": "error",
                     "memory_used": None
                 }
                 
@@ -247,7 +194,7 @@ if result.stderr:
             # Clean up
             try:
                 import shutil
-                shutil.rmtree(temp_dir, ignore_errors=True)
+                shutil.rmtree(temp_dir_path, ignore_errors=True)
             except:
                 pass
     
@@ -481,8 +428,8 @@ Generated Code:
 ```{request.language}"""
         
         # Use specialized model config for code generation
-        model_config = {**current_user.model_preferences, **(request.model_config or {})}
-        model_config.update({
+        model_options = {**current_user.model_preferences, **(request.model_options or {})}
+        model_options.update({
             "temperature": 0.2,  # Lower temperature for more deterministic code
             "max_tokens": 2000,
             "top_p": 0.9
@@ -492,7 +439,7 @@ Generated Code:
         llm_response = await llm_service.generate_response(
             code_prompt,
             model_type="code",
-            **model_config
+            **model_options
         )
         
         response_text = llm_response["response"]
